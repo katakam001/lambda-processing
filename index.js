@@ -25,7 +25,7 @@ exports.handler = async (event, context) => {
             console.log("Account ID", metadata.accountid);
             console.log("User ID", metadata.userid);
             console.log("Financial Year:", metadata.financialyear);
-            const groupedRecords = await processPDF(fileData.Body, context.awsRequestId);
+            const groupedRecords = await processPDF(fileData.Body, context.awsRequestId,metadata.statementtype);
             await sendMessagesInBatch(groupedRecords, metadata, fileType);
         } else if (fileName.endsWith(".csv")) {
             fileType = "csv";

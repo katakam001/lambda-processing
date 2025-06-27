@@ -1,6 +1,6 @@
 const { spawn } = require("child_process");
 const fs = require("fs");
-const { extractTableFromBuffer, groupRecordsByTransactionId } = require("../utils/tableParser");
+const { extractTableFromBuffer, groupRecordsByTransactionId, extractTableFromBufferForBankStatement, extractTableFromBufferForTrailBalance } = require("../utils/tableParser");
 // Helper function to compress PDFs
 async function compressPDF(fileBuffer, requestId) {
     const inputFilePath = `/tmp/input-${requestId}.pdf`;
@@ -46,10 +46,31 @@ async function compressPDF(fileBuffer, requestId) {
     });
 }
 
-async function processPDF(fileBuffer, requestId) {
-    const compressedPDFBuffer = await compressPDF(fileBuffer, requestId);
-    const tableDataByPage = await extractTableFromBuffer(compressedPDFBuffer);
-    return groupRecordsByTransactionId(tableDataByPage);
+async function processPDF(fileBuffer, requestId, statementType) {
+    try {
+        console.log(`Processing PDF for Request ID: ${requestId}, Type: ${statementType}`);
+
+        // ✅ Compress PDF before further processing
+        const compressedPDFBuffer = await compressPDF(fileBuffer, requestId);
+
+        // ✅ Process based on statement type
+        if (statementType === "bank") {
+            const tableDataByPage = await extractTableFromBufferForBankStatement(compressedPDFBuffer);
+
+            console.log(`Extracted Bank Statement Data:`, tableDataByPage);
+
+            return groupRecordsByTransactionId(tableDataByPage);
+        } else {
+            const extractedData = await extractTableFromBufferForTrailBalance(compressedPDFBuffer);
+
+            console.log(`Extracted Trial Balance Data:`, extractedData);
+
+            return extractedData;
+        }
+    } catch (error) {
+        console.error(`Error processing PDF for Request ID ${requestId}:`, error);
+        throw error; // ✅ Properly propagate the error for handling
+    }
 }
 
 module.exports = { processPDF };
