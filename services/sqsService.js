@@ -54,7 +54,8 @@ async function sendMessagesInBatch(records, metadata, fileType) {
                 MessageAttributes: {
                     userId: { DataType: "String", StringValue: metadata.userid },
                     financialYear: { DataType: "String", StringValue: metadata.financialyear },
-                    type: { DataType: "String", StringValue: metadata.type }
+                    type: { DataType: "String", StringValue: metadata.type },
+                    taxType: { DataType: "String", StringValue: metadata.taxtype }
                 }
             }));
 

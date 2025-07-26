@@ -46,7 +46,7 @@ async function compressPDF(fileBuffer, requestId) {
     });
 }
 
-async function processPDF(fileBuffer, requestId, statementType) {
+async function processPDF(fileBuffer, requestId, statementType,bankName) {
     try {
         console.log(`Processing PDF for Request ID: ${requestId}, Type: ${statementType}`);
 
@@ -55,7 +55,7 @@ async function processPDF(fileBuffer, requestId, statementType) {
 
         // ✅ Process based on statement type
         if (statementType === "bank") {
-            const tableDataByPage = await extractTableFromBufferForBankStatement(compressedPDFBuffer);
+            const tableDataByPage = await extractTableFromBufferForBankStatement(compressedPDFBuffer,bankName);
 
             console.log(`Extracted Bank Statement Data:`, tableDataByPage);
 
@@ -63,7 +63,7 @@ async function processPDF(fileBuffer, requestId, statementType) {
         } else {
             const extractedData = await extractTableFromBufferForTrailBalance(compressedPDFBuffer);
 
-            console.log(`Extracted Trial Balance Data:`, extractedData);
+            console.log(`🔍 Trial Balance entries extracted: ${extractedData.length}`);
 
             return extractedData;
         }

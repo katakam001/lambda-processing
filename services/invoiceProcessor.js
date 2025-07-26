@@ -18,6 +18,7 @@ async function processCSV(buffer) {
                         FeedDate: row["entryDate"],
                         Name: row["name"],
                         GstInNo: row["gstNo"],
+                        ItemName: row["itemName"],
                         GstValue0: parseFloat(row["gstValue0"]),
                         GstValue5: parseFloat(row["gstValue5"]),
                         GstValue12: parseFloat(row["gstValue12"]),
