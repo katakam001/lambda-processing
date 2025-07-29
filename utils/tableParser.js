@@ -1,6 +1,7 @@
 const { PdfReader } = require("pdfreader");
+const crypto = require('crypto');
 
-const extractTableFromBufferForBankStatement = (buffer, bankName) => {
+const extractTableFromBufferForBankStatement = (buffer, bankName,userId,financialYear) => {
     return new Promise((resolve, reject) => {
         const tableDataByPage = {};
         const rawItemsByPage = {};
@@ -103,7 +104,7 @@ const extractTableFromBufferForBankStatement = (buffer, bankName) => {
             // Add more banks as needed
         };
 
-        const banksToExcludeCarryForward = ['UNION BANK OF INDIA', 'CANARA BANK', 'SBI', 'CITY UNION BANK','AXIS BANK']; // add banks as needed
+        const banksToExcludeCarryForward = ['UNION BANK OF INDIA', 'CANARA BANK', 'SBI', 'CITY UNION BANK', 'AXIS BANK']; // add banks as needed
         const banksToIncludeRefineRefNoAndNarration = ['HDFC BANK']; // add banks as needed
         const banksToIncludeRefineTransactionIdAndNarration = ['UNION BANK OF INDIA']; // add banks as needed
         const banksToIncludeRefineDateAndNarration = ['CITY UNION BANK', 'IDFC FIRST BANK']; // add banks as needed --> validated
@@ -113,13 +114,14 @@ const extractTableFromBufferForBankStatement = (buffer, bankName) => {
         const banksToIncludeMergeNarrationLines = ['HDFC BANK']; // add banks as needed
         const banksToIncludeMergeTransactionDetails = ['IDFC FIRST BANK']; // add banks as needed --> validated
         const banksToIncludeCarryForwardLogicToreplaceYAxis = ['IDFC FIRST BANK']; // add banks as needed --> validated
-        const bankshasHeadersInOnePage = ['HDFC BANK', 'ICICI BANK', 'BANK OF INDIA','AXIS BANK']; // add banks as needed
-        const bankToIncludeValidateHeaderWithCustomParameter = ['HDFC BANK', 'BANK OF INDIA','AXIS BANK']; // add banks as needed
+        const bankshasHeadersInOnePage = ['HDFC BANK', 'ICICI BANK', 'BANK OF INDIA', 'AXIS BANK']; // add banks as needed
+        const bankToIncludeValidateHeaderWithCustomParameter = ['HDFC BANK', 'BANK OF INDIA', 'AXIS BANK']; // add banks as needed
         const bankToIncludeValidateHeaderWithTransactionId = ['ICICI BANK']; // add banks as needed
         const banksToIncludeMergeHeaders = ['CITY UNION BANK']; // add banks as needed
         const banksToIncludeHeadersInMultipleLines = ['ICICI BANK']; // add banks as needed
         const banksToIncludeHeadernWithEpsilionVaration = ['IDFC FIRST BANK']; // add banks as needed --> validated
-        const banksToIncludeHeadersAlign = ['BANK OF INDIA']; // add banks as needed
+        const banksToIncludeHeadersAlign = ['BANK OF INDIA', 'HDFC BANK']; // add banks as needed
+        const banksToIncludeChangeHeadersAlign = ['HDFC BANK']; // add banks as needed
         const banksToIncludeHeadersAlignChangeXAxis = ['AXIS BANK']; // add banks as needed
         const banksToIncludeOrderChangeOfRemarks = ['BANK OF INDIA']; // add banks as needed
 
@@ -305,17 +307,23 @@ const extractTableFromBufferForBankStatement = (buffer, bankName) => {
                 pageKeys.forEach((page, index) => {
 
                     const nextPage = pageKeys[index + 1]; // will be undefined for last page
-                        // Combine multi-line rows for each page
+                    // Combine multi-line rows for each page
                     // console.log(tableDataByPage[page]);
                     // console.log(headerPositionsByPage[page]);
                     const columnXMap = headerPositionsByPage[page]; // Your existing header position map
 
                     let snappedTableData;
+                    let width = 1;
                     // console.log(alignments);
+                    if (banksToIncludeChangeHeadersAlign.includes(bankName)) {
+                        alignments["Deposit"] = 'left';
+                        alignments["Balance"] = 'left';
+                        width = 0.5
+                    }
 
                     if (banksToIncludeHeadersAlign.includes(bankName)) {
                         snappedTableData = tableDataByPage[page].map(item =>
-                            snapToColumnWithAlignment(item, columnXMap, alignments)
+                            snapToColumnWithAlignment(item, columnXMap, alignments, width)
                         );
                     } else {
                         snappedTableData = tableDataByPage[page].map(item =>
@@ -323,7 +331,7 @@ const extractTableFromBufferForBankStatement = (buffer, bankName) => {
                         );
                     }
                     // console.log(snappedTableData);
-                    
+
                     if (banksToIncludeHeadersAlignChangeXAxis.includes(bankName)) {
                         snappedTableData = snapXCoordinate(snappedTableData, columnXMap["Chq No"], columnXMap["Particulars"], 0.1);
                     }
@@ -343,7 +351,7 @@ const extractTableFromBufferForBankStatement = (buffer, bankName) => {
                             ...snappedTableData.filter(item => Math.abs(item.x - columnXMap["Remarks"]) <= epsilon)
                         ].sort((a, b) => a.y - b.y); // optional: restore order
                     }
-                    
+
                     if (banksToIncludeRefineTransactionIdAndNarration.includes(bankName)) {
 
                         snappedTableData = snappedTableData.map(item =>
@@ -357,7 +365,7 @@ const extractTableFromBufferForBankStatement = (buffer, bankName) => {
                             refineRefNoAndNarration(item, columnXMap["Narration"], columnXMap["Chq./Ref.No."])
                         );
                     }
-                    if (banksToIncludeRefineDateAndNarration.includes(bankName) &&  columnXMap["Particulars"]) {
+                    if (banksToIncludeRefineDateAndNarration.includes(bankName) && columnXMap["Particulars"]) {
 
                         snappedTableData = snappedTableData.map(item =>
                             refineDateAndParticulars(item, columnXMap["Particulars"], columnXMap["Date"])
@@ -418,7 +426,7 @@ const extractTableFromBufferForBankStatement = (buffer, bankName) => {
                                 }));
                             }
                         }
-                        
+
                         if (banksToIncludeCarryForwardLogicToreplaceYAxis.includes(bankName)) {
                             const currentPagenarration = mergedDates.filter(item =>
                                 Math.abs(item.x - columnXMap["Transaction Details"]) < epsilon
@@ -433,7 +441,7 @@ const extractTableFromBufferForBankStatement = (buffer, bankName) => {
                                 }));
                             }
                         }
-                        
+
                         console.log(carryForwardRows);
                         mergedDates.push(...carryForwardRows);
                     }
@@ -462,7 +470,7 @@ const extractTableFromBufferForBankStatement = (buffer, bankName) => {
                             combinedRows = mergedDates.map(item =>
                                 refineYAxisOfParticularsWithDate(item, columnXMap["Trans Date and"], columnXMap["Transaction Details"], mergedDates, 0.9)
                             );
-                                combinedRows = combineYAxisSameMultiLineRows(combinedRows);
+                            combinedRows = combineYAxisSameMultiLineRows(combinedRows);
                         }
                         // console.log(combinedRows);
                     }
@@ -497,10 +505,9 @@ const extractTableFromBufferForBankStatement = (buffer, bankName) => {
                     }
 
                     // Convert to JSON
-                    console.log(`Page ${page} Table Data:`, tableJSON);
-                    // combinedTableData[page] = tableJSON;
+                    // console.log(`Page ${page} Table Data:`, tableJSON);
+                    combinedTableData[page] = normalizeBankPDF(tableJSON,bankName,userId,financialYear);
                 });
-
                 resolve(combinedTableData);
             } else if (item.page) {
                 // New page detected
@@ -600,7 +607,7 @@ const extractTableFromBufferForBankStatement = (buffer, bankName) => {
                             }
                             headersFound = true;
                             isAfterTable = false;
-                            tableEndY=null;
+                            tableEndY = null;
                             console.log(`Headers detected on Page ${currentPage} using format:`, headerSet);
                             requiredHeaders = headerSet;
                             break; // Exit once a matching format is found
@@ -777,6 +784,114 @@ const extractTableFromBufferForBankStatement = (buffer, bankName) => {
 
             // Filter rows above that threshold — likely wrapped description/ref
             return parsedRowsOnNextPage.filter(item => item.y < startOfNextTxnY);
+        }
+        function normalizeBankPDF(pageRows,bankName,userId,financialYear) {
+            const normalized = [];
+
+                for (const row of pageRows) {
+                    normalized.push(normalizeTransactionRow(row,bankName,userId,financialYear));
+                }
+
+            return normalized;
+        }
+
+        function generateReference(input) {
+            return crypto.createHash('sha256').update(input, 'utf8').digest('hex');
+        }
+
+        function normalizeTransactionRow(row, bankName,userId,financialYear) {
+            const keys = Object.keys(row);
+            const lowerMap = Object.fromEntries(keys.map(k => [k.toLowerCase(), k]));
+
+            const rawDate = row[lowerMap['date']] || row[lowerMap['value date']] || row[lowerMap['txn date']] || row[lowerMap['transaction']] || row[lowerMap['value']] || row[lowerMap['trans date and']] || row[lowerMap['tran date']] || '';
+            const formattedDate = standardizeDate(rawDate);
+
+            const rawDebit = row[lowerMap['debit']] || row[lowerMap['debits']] || row[lowerMap['withdrawal']] || row[lowerMap['withdrawals']] || row[lowerMap['withdra']] || (row[lowerMap['amount(rs.)']]?.includes('Dr') ? row[lowerMap['amount(rs.)']] : '');
+            const rawCredit = row[lowerMap['credit']] || row[lowerMap['credits']] || row[lowerMap['deposit']] || row[lowerMap['deposits']] || (row[lowerMap['amount(rs.)']]?.includes('Cr') ? row[lowerMap['amount(rs.)']] : '');
+
+            const debit = rawDebit ? cleanAmount(rawDebit) : '0.00';
+            const credit = rawCredit ? cleanAmount(rawCredit) : '0.00';
+
+            // Mutual exclusion rule
+            const finalDebit = debit !== '0.00' ? debit : '0.00';
+            const finalCredit = debit !== '0.00' ? '0.00' : credit;
+
+            const balanceRaw = row[lowerMap['balance']] || row[lowerMap['balance(rs.)']] || row[lowerMap['balancer']] || '';
+            const balance = balanceRaw ? cleanAmount(balanceRaw) : '0.00';
+
+            let reference = row[lowerMap['transaction id']] || row[lowerMap['ref no./cheque']] || row[lowerMap['ref/cheque']] || row[lowerMap['cheque no']] || row[lowerMap['cheque no.']] || row[lowerMap['cheque']] || row[lowerMap['chq no']] || row[lowerMap['chq./ref.no.']] || row[lowerMap['id']] || '';
+            const description = row[lowerMap['remarks']] || row[lowerMap['description']] || row[lowerMap['narration']] || row[lowerMap['particulars']] || row[lowerMap['transaction details']] || '';
+
+            if(!reference){
+            const finalAmount = finalDebit !== '0.00' ? finalDebit : finalCredit;
+            const fingerprint = `${formattedDate}|${description.trim()}|${finalAmount}`;
+            const scopedInput = `${bankName}|${userId}|${financialYear}|${fingerprint}`;
+            reference = generateReference(scopedInput).slice(0, 12);
+            }
+            
+            return {
+                date: formattedDate,
+                description,
+                reference,
+                debit: finalDebit,
+                credit: finalCredit,
+                balance
+            };
+        }
+
+        function standardizeDate(dateStr = '') {
+            const trimmed = dateStr.trim();
+
+            // Match DD-MM-YYYY or DD/MM/YYYY
+            const ddmmyyyyMatch = trimmed.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/);
+            if (ddmmyyyyMatch) {
+                const [_, dd, mm, yyyy] = ddmmyyyyMatch;
+                const isoStr = `${yyyy}-${mm}-${dd}`; // ISO-compatible format
+                const parsed = new Date(isoStr);
+                if (!isNaN(parsed)) {
+                    return `${dd}/${mm}/${yyyy}`;
+                }
+            }
+
+            // Continue with other known formats...
+            const knownFormats = [
+                { regex: /^\d{2}-[A-Za-z]{3}-\d{4}$/, format: 'DD/MMM/YYYY' },
+                { regex: /^[A-Za-z]{3} \d{2} \d{4}$/, format: 'MMM DD YYYY' },
+                { regex: /^\d{2}\/[A-Za-z]{3}\/\d{4}$/, format: 'DD/MMM/YYYY' },
+                { regex: /^\d{2}-[A-Z]{3}-\d{4}$/, format: 'DD/MMM/YYYY' },
+                { regex: /^\d{2} [A-Za-z]{3} \d{4}$/, format: 'DD/MMM/YYYY' },
+                { regex: /^[A-Za-z]{3} \d{1,2} \d{4}$/, format: 'MMM DD YYYY' }
+            ];
+
+            for (const { regex } of knownFormats) {
+                if (regex.test(trimmed)) {
+                    const normalized = new Date(trimmed.replace(/-/g, '/').replace(/ +/g, ' '));
+                    if (!isNaN(normalized)) {
+                        const dd = String(normalized.getDate()).padStart(2, '0');
+                        const mm = String(normalized.getMonth() + 1).padStart(2, '0');
+                        const yyyy = normalized.getFullYear();
+                        return `${dd}/${mm}/${yyyy}`;
+                    }
+                }
+            }
+
+            // Final fallback
+            const loose = new Date(trimmed);
+            if (!isNaN(loose)) {
+                const dd = String(loose.getDate()).padStart(2, '0');
+                const mm = String(loose.getMonth() + 1).padStart(2, '0');
+                const yyyy = loose.getFullYear();
+                return `${dd}/${mm}/${yyyy}`;
+            }
+
+            return trimmed;
+        }
+
+
+        function cleanAmount(value = '') {
+            return value
+                .replace(/₹|INR|\(|\)|Cr|CR|Dr|DR|-|,/gi, '')
+                .trim();
         }
 
     });
@@ -1389,7 +1504,7 @@ const groupRecordsByTransactionId = (tableDataByPage) => {
 
     // Flatten page-wise data and group by Transaction Id
     Object.values(tableDataByPage).flat().forEach((row) => {
-        const transactionId = row["Transaction Id"];
+        const transactionId = row["reference"];
         if (!groupedRecords[transactionId]) {
             groupedRecords[transactionId] = [];
         }
@@ -1700,7 +1815,7 @@ const cleanChequeNoFromAmount = (groupedByY, headerXMap, epsilon = 0.01) => {
 const detectAlignmentFromText = (text) => {
     const t = text.trim();
 
-    if (/^(Debit|Credit|Balance|Amount)$/i.test(t)) return 'right'; // numerical columns
+    if (/^(Debit|Credit|Balance|Amount|Withdrawal|Deposit)$/i.test(t)) return 'right'; // numerical columns
     if (/^(Date|Sr No|Remarks|Description)$/i.test(t)) return 'left'; // typical text fields
     if (/^[A-Z\s]+$/.test(t) && t.length < 20) return 'center'; // maybe labels
 
@@ -1723,12 +1838,11 @@ const snapToColumn = (item, columnXMap) => {
     return { ...item, x: closestX };
 };
 
-const estimatedDataWidth = (text) => {
-    const avgCharWidth = 1; // tweak per font if needed
-    return text.trim().length * avgCharWidth;
+const estimatedDataWidth = (text, width) => {
+    return text.trim().length * width;
 };
 
-const snapToColumnWithAlignment = (item, columnXMap, alignments) => {
+const snapToColumnWithAlignment = (item, columnXMap, alignments, width) => {
     const textLength = item.text.trim().length;
     const applyOffset = textLength < 10; // Apply only if text is large enough
     let closestX = item.x;
@@ -1740,9 +1854,9 @@ const snapToColumnWithAlignment = (item, columnXMap, alignments) => {
         let anchorX = columnXMap[col];
         if (applyOffset) {
             if (alignment === 'right') {
-                anchorX += estimatedDataWidth(item.text);
+                anchorX += estimatedDataWidth(item.text, width);
             } else if (alignment === 'center') {
-                anchorX += estimatedDataWidth(item.text) / 2;
+                anchorX += estimatedDataWidth(item.text, width) / 2;
             }
         }
         const dist = Math.abs(item.x - anchorX);
@@ -1779,21 +1893,21 @@ const refineRefNoAndNarration = (
 };
 
 const refineTransactionIdAndRemarks = (item, narrationX, refNoX) => {
-  const isValidRefNo = text => {
-    const cleaned = text.trim();
+    const isValidRefNo = text => {
+        const cleaned = text.trim();
 
-    return (
-      (cleaned.startsWith("S") && cleaned.length >= 6 && cleaned.length <= 9) ||
-      (cleaned.startsWith("A") && cleaned.length >= 6 && cleaned.length <= 8)
-    );
-  };
+        return (
+            (cleaned.startsWith("S") && cleaned.length >= 6 && cleaned.length <= 9) ||
+            (cleaned.startsWith("A") && cleaned.length >= 6 && cleaned.length <= 8)
+        );
+    };
 
-  if (item.x === refNoX && !isValidRefNo(item.text)) {
-    // Mis-snapped narration at Ref.No. position
-    return { ...item, x: narrationX };
-  }
+    if (item.x === refNoX && !isValidRefNo(item.text)) {
+        // Mis-snapped narration at Ref.No. position
+        return { ...item, x: narrationX };
+    }
 
-  return item;
+    return item;
 };
 
 
@@ -1815,12 +1929,12 @@ const refineDateAndParticulars = (
 
 function snapXCoordinate(items, sourceX, targetX, epsilon) {
 
-  return items.map(item => {
-    if (Math.abs(item.x - sourceX) < epsilon) {
-      return { ...item, x: targetX };
-    }
-    return item;
-  });
+    return items.map(item => {
+        if (Math.abs(item.x - sourceX) < epsilon) {
+            return { ...item, x: targetX };
+        }
+        return item;
+    });
 }
 
 
