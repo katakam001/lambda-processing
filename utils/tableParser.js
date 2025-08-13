@@ -1,7 +1,7 @@
 const { PdfReader } = require("pdfreader");
 const crypto = require('crypto');
 
-const extractTableFromBufferForBankStatement = (buffer, bankName,userId,financialYear) => {
+const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, financialYear) => {
     return new Promise((resolve, reject) => {
         const tableDataByPage = {};
         const rawItemsByPage = {};
@@ -12,7 +12,8 @@ const extractTableFromBufferForBankStatement = (buffer, bankName,userId,financia
         let headerY = null; // Y-coordinate of the header row
         let tableEndY = null;
         let isAfterTable = false; // Flag to ignore rows after "Details of statement"
-        let isAFuzzyLogic = false; // Flag to ignore rows after "Details of statement"
+        let isAFuzzyLogic = false;
+        let isHorizontalLineDetected = false;
         let epsilon = 0.1; // Tolerance for y-position comparison
         const bankHeaders = {
             'UNION BANK OF INDIA': [
@@ -45,7 +46,8 @@ const extractTableFromBufferForBankStatement = (buffer, bankName,userId,financia
                 ["Trans Date and", "Value Date", "Transaction Details", "Ref/Cheque", "Debit", "Credit", "Balance"]
             ],
             'BANK OF INDIA': [
-                ["Sr No", "Date", "Remarks", "Debit", "Credit", "Balance"]
+                ["Sr No", "Date", "Remarks", "Debit", "Credit", "Balance"],
+                ["DATE", "PARTICULARS", "CHQ-NO", "Debit", "Credit", "Available Bal."]
             ],
             'AXIS BANK': [
                 ["Tran Date", "Chq No", "Particulars", "Debit", "Credit", "Balance", "Init."]
@@ -118,6 +120,7 @@ const extractTableFromBufferForBankStatement = (buffer, bankName,userId,financia
         const bankToIncludeValidateHeaderWithCustomParameter = ['HDFC BANK', 'BANK OF INDIA', 'AXIS BANK']; // add banks as needed
         const bankToIncludeValidateHeaderWithTransactionId = ['ICICI BANK']; // add banks as needed
         const banksToIncludeMergeHeaders = ['CITY UNION BANK']; // add banks as needed
+        const banksToIncludeHorizontalLine = ['BANK OF INDIA']; // add banks as needed
         const banksToIncludeHeadersInMultipleLines = ['ICICI BANK']; // add banks as needed
         const banksToIncludeHeadernWithEpsilionVaration = ['IDFC FIRST BANK']; // add banks as needed --> validated
         const banksToIncludeHeadersAlign = ['BANK OF INDIA', 'HDFC BANK']; // add banks as needed
@@ -132,7 +135,7 @@ const extractTableFromBufferForBankStatement = (buffer, bankName,userId,financia
         // console.log(requiredHeaders);
         let detectedHeaders = new Set(); // Store detected headers for validation
 
-        new PdfReader().parseBuffer(buffer, (err, item) => {
+        new PdfReader().parseBuffer(fileStream, (err, item) => {
             if (err) {
                 reject(err);
             } else if (!item) {
@@ -155,7 +158,7 @@ const extractTableFromBufferForBankStatement = (buffer, bankName,userId,financia
                         console.log(`🧩 Page ${page} headers:`, headerXMap);
                         headerPositionsByPage[page] = { ...headerXMap };
 
-                        const groupByY = groupItemsByY(items);
+                        const groupByY = groupItemsByY(items, 0.200);
                         // console.log(groupByY);
 
                         updateGroupsWithAmountItems(groupByY, headerXMap);
@@ -164,6 +167,45 @@ const extractTableFromBufferForBankStatement = (buffer, bankName,userId,financia
                         // console.log(groupByY);
                         const flattened = Object.values(groupByY).flat();
                         tableDataByPage[page] = flattened;
+
+                    });
+
+                }
+
+                if (isHorizontalLineDetected && banksToIncludeHorizontalLine.includes(bankName)) {
+
+                    const pages = Object.entries(rawItemsByPage);
+
+                    // Infer headerXMap only once using the first page
+                    const [firstPageKey, firstPageItems] = pages[0];
+                    const groupByY = groupItemsByY(firstPageItems, 0.01);
+                    const mergedLines = mergeGroupedText(groupByY);
+                    const header = detectHeaderLine(mergedLines, headerVariants);
+                    const headerXMap = estimateHeaderXMap(header.text, 0, 1); // baseX and charWidth can be tuned
+                    console.log("📌 Inferred header positions from first page:", headerXMap);
+
+
+                    // Apply this headerXMap across all pages
+                    pages.forEach(([page, items]) => {
+                        // Use the shared headerXMap for each page
+                        // console.log(`🧩 Page ${page} headers:`, headerXMap);
+                        headerPositionsByPage[page] = { ...headerXMap };
+
+                        const groupByY = groupItemsByY(items, 0.01);
+                        const mergedLines = mergeGroupedText(groupByY);
+                        let flattened = Object.values(parseDataRows(mergedLines, headerPositionsByPage[page], Object.keys(headerPositionsByPage[page]))).flat();
+
+                        if (parseInt(page) > 1) {
+                            const carryForwarded = Object.values(
+                                extractcarryForwardedParticulars(mergedLines, headerPositionsByPage[page])
+                            ).flat();
+
+                            if (carryForwarded.length) {
+                                flattened = [...carryForwarded, ...flattened]; // prepend
+                            }
+                        }
+
+                        tableDataByPage[page] = flattened
 
                     });
 
@@ -330,7 +372,7 @@ const extractTableFromBufferForBankStatement = (buffer, bankName,userId,financia
                             snapToColumn(item, columnXMap)
                         );
                     }
-                    // console.log(snappedTableData);
+                    //     console.log(snappedTableData);
 
                     if (banksToIncludeHeadersAlignChangeXAxis.includes(bankName)) {
                         snappedTableData = snapXCoordinate(snappedTableData, columnXMap["Chq No"], columnXMap["Particulars"], 0.1);
@@ -342,9 +384,8 @@ const extractTableFromBufferForBankStatement = (buffer, bankName,userId,financia
                             refineValueDateAndParticulars(item, columnXMap["Transaction Details"], columnXMap["Value Date"])
                         );
                     }
-                    // console.log(snappedTableData);
 
-                    if (banksToIncludeOrderChangeOfRemarks.includes(bankName)) {
+                    if (banksToIncludeOrderChangeOfRemarks.includes(bankName) && columnXMap["Remarks"]) {
 
                         snappedTableData = [
                             ...snappedTableData.filter(item => Math.abs(item.x - columnXMap["Remarks"]) >= epsilon),
@@ -506,7 +547,7 @@ const extractTableFromBufferForBankStatement = (buffer, bankName,userId,financia
 
                     // Convert to JSON
                     // console.log(`Page ${page} Table Data:`, tableJSON);
-                    combinedTableData[page] = normalizeBankPDF(tableJSON,bankName,userId,financialYear);
+                    combinedTableData[page] = normalizeBankPDF(tableJSON, bankName, userId, financialYear);
                 });
                 resolve(combinedTableData);
             } else if (item.page) {
@@ -613,6 +654,9 @@ const extractTableFromBufferForBankStatement = (buffer, bankName,userId,financia
                             break; // Exit once a matching format is found
                         }
                     }
+                }
+                if (!isHorizontalLineDetected) {
+                    isHorizontalLineDetected = isHorizontalLine(decodedText);
                 }
 
                 // Identify the end of the table when "Details of statement" is detected
@@ -785,12 +829,12 @@ const extractTableFromBufferForBankStatement = (buffer, bankName,userId,financia
             // Filter rows above that threshold — likely wrapped description/ref
             return parsedRowsOnNextPage.filter(item => item.y < startOfNextTxnY);
         }
-        function normalizeBankPDF(pageRows,bankName,userId,financialYear) {
+        function normalizeBankPDF(pageRows, bankName, userId, financialYear) {
             const normalized = [];
 
-                for (const row of pageRows) {
-                    normalized.push(normalizeTransactionRow(row,bankName,userId,financialYear));
-                }
+            for (const row of pageRows) {
+                normalized.push(normalizeTransactionRow(row, bankName, userId, financialYear));
+            }
 
             return normalized;
         }
@@ -799,7 +843,7 @@ const extractTableFromBufferForBankStatement = (buffer, bankName,userId,financia
             return crypto.createHash('sha256').update(input, 'utf8').digest('hex');
         }
 
-        function normalizeTransactionRow(row, bankName,userId,financialYear) {
+        function normalizeTransactionRow(row, bankName, userId, financialYear) {
             const keys = Object.keys(row);
             const lowerMap = Object.fromEntries(keys.map(k => [k.toLowerCase(), k]));
 
@@ -816,19 +860,18 @@ const extractTableFromBufferForBankStatement = (buffer, bankName,userId,financia
             const finalDebit = debit !== '0.00' ? debit : '0.00';
             const finalCredit = debit !== '0.00' ? '0.00' : credit;
 
-            const balanceRaw = row[lowerMap['balance']] || row[lowerMap['balance(rs.)']] || row[lowerMap['balancer']] || '';
+            const balanceRaw = row[lowerMap['balance']] || row[lowerMap['balance(rs.)']] || row[lowerMap['balancer']] || row[lowerMap['available bal.']] || '';
             const balance = balanceRaw ? cleanAmount(balanceRaw) : '0.00';
 
-            let reference = row[lowerMap['transaction id']] || row[lowerMap['ref no./cheque']] || row[lowerMap['ref/cheque']] || row[lowerMap['cheque no']] || row[lowerMap['cheque no.']] || row[lowerMap['cheque']] || row[lowerMap['chq no']] || row[lowerMap['chq./ref.no.']] || row[lowerMap['id']] || '';
+            // let reference = row[lowerMap['transaction id']] || row[lowerMap['ref no./cheque']] || row[lowerMap['ref/cheque']] || row[lowerMap['cheque no']] || row[lowerMap['cheque no.']] || row[lowerMap['cheque']] || row[lowerMap['chq no']] || row[lowerMap['chq./ref.no.']] || row[lowerMap['chq-no']] || row[lowerMap['id']] || '';
+
             const description = row[lowerMap['remarks']] || row[lowerMap['description']] || row[lowerMap['narration']] || row[lowerMap['particulars']] || row[lowerMap['transaction details']] || '';
 
-            if(!reference){
             const finalAmount = finalDebit !== '0.00' ? finalDebit : finalCredit;
             const fingerprint = `${formattedDate}|${description.trim()}|${finalAmount}`;
             const scopedInput = `${bankName}|${userId}|${financialYear}|${fingerprint}`;
-            reference = generateReference(scopedInput).slice(0, 12);
-            }
-            
+            const reference = generateReference(scopedInput).slice(0, 12);
+
             return {
                 date: formattedDate,
                 description,
@@ -894,10 +937,119 @@ const extractTableFromBufferForBankStatement = (buffer, bankName,userId,financia
                 .trim();
         }
 
+        function isHorizontalLine(text) {
+            // Matches lines with 10 or more dashes or spaces
+            const pattern = /^[-\s]{10,}$/;
+            return pattern.test(text);
+        }
+
+        function parseDataRows(mergedLines, headerXMap, headers) {
+            const allRows = [];
+            let currentRow = null;
+            for (const [y, line] of Object.entries(mergedLines)) {
+                const rawSegments = line.split('|');
+                const isStructured = rawSegments.filter(s => s.trim()).length > 1;
+                const segments = rawSegments.slice(1, -1); // Remove first and last empty segments
+                if (isStructured) {
+                    const row = [];
+                    let headerIndex = 0;
+                    let debitCount = 0;
+                    let creditCount = 0;
+
+                    for (let i = 0; i < segments.length; i++) {
+                        const text = segments[i].trim();
+                        const header = headers[headerIndex];
+                        const x = headerXMap[header];
+
+
+                        // Custom increment logic
+                        if (header === 'Debit') {
+                            debitCount++;
+                            if (text) {
+                                row.push({ text, x, y: parseFloat(y) });
+                            }
+                            if (debitCount >= 2) headerIndex++;
+                        } else if (header === 'Credit') {
+                            creditCount++;
+                            if (text) {
+                                row.push({ text, x, y: parseFloat(y) });
+                            }
+                            if (creditCount >= 2) headerIndex++;
+                        } else {
+                            headerIndex++;
+                            row.push({ text, x, y: parseFloat(y) });
+                        }
+
+                        if (headerIndex >= headers.length) break;
+                    }
+                    currentRow = row;
+                    allRows.push(row);
+                } else if (currentRow) {
+                    // Continuation line — append to 'PARTICULARS'
+                    const continuationText = rawSegments[0].trim();
+                    const particularsField = currentRow.find(f => f.x === headerXMap['PARTICULARS']);
+                    if (particularsField) {
+                        particularsField.text += ' ' + continuationText;
+                    }
+                }
+            }
+
+            return cleanParticularsField(allRows.filter((row) => isValidRow(row, headerXMap)), headerXMap);
+
+        }
+
+        function isValidRow(row, headerXMap) {
+            const dateRegex = /^\d{2}-\d{2}-\d{4}$/;
+            const amountRegex = /^\d+\.\d{2}$/;
+            const textRegex = /\w+/;
+
+            const hasDate = row.some(cell => cell.x === headerXMap.DATE && dateRegex.test(cell.text));
+            const hasAmount = row.some(cell =>
+                (cell.x === headerXMap.Debit || cell.x === headerXMap.Credit) &&
+                amountRegex.test(cell.text)
+            );
+
+            const hasText = row.some(cell => cell.x === headerXMap.PARTICULARS && textRegex.test(cell.text));
+
+            return hasDate && hasAmount && hasText;
+        }
+
+        function cleanParticularsField(rows, headerXMap) {
+            return rows.map(row => {
+                const particularsField = row.find(f => f.x === headerXMap['PARTICULARS']);
+                if (particularsField && /-{5,}/.test(particularsField.text)) {
+                    // console.log(particularsField);
+                    // Remove horizontal line and everything after it
+                    const parts = particularsField.text.split(/-{5,}/);
+                    particularsField.text = parts[0].trim();
+                    // console.log(particularsField.text);
+                }
+                return row;
+            });
+        }
+
+        function extractcarryForwardedParticulars(mergedLines, headerXMap) {
+            const allRows = [];
+
+            for (const [y, line] of Object.entries(mergedLines)) {
+                if (!line.includes('|')) {
+                    const text = line.trim();
+                    if (text) {
+                        const x = headerXMap['PARTICULARS'];
+                        allRows.push([{ text, x, y: parseFloat(y) }]);
+                    }
+                } else {
+                    break; // Stop scanning once structured data starts
+                }
+            }
+
+            return cleanParticularsField(allRows, headerXMap);
+        }
+
     });
 };
 
-const extractTableFromBufferForTrailBalance = (buffer) => {
+const extractTableFromBufferForTrailBalance = (fileStream) => {
     return new Promise((resolve, reject) => {
         let tableDataByPage = [];
         let currentPage = 0;
@@ -910,7 +1062,7 @@ const extractTableFromBufferForTrailBalance = (buffer) => {
 
         console.log("Starting PDF Processing...");
 
-        new PdfReader().parseBuffer(buffer, (err, item) => {
+        new PdfReader().parseBuffer(fileStream, (err, item) => {
             if (err) {
                 console.error("Error reading PDF:", err);
                 return reject(err);
@@ -1490,6 +1642,47 @@ const cleanTableRow = (text) => {
         .trim();
 };
 
+const mergeGroupedText = (groupedByY) => {
+    const mergedLines = {};
+
+    for (const [yKey, items] of Object.entries(groupedByY)) {
+        const mergedText = items.map(item => item.text).join('');
+        mergedLines[yKey] = mergedText;
+    }
+
+    return mergedLines;
+};
+
+const detectHeaderLine = (lines, headerVariants) => {
+    for (const headerSet of headerVariants) {
+        for (const [y, text] of Object.entries(lines)) {
+            if (headerSet.every(kw => text.includes(kw))) {
+                return { y, text };
+            }
+        }
+    }
+    return null;
+};
+
+
+const estimateHeaderXMap = (headerText, baseX = 0, charWidth = 1) => {
+    const segments = headerText.split('|');
+    const headerXMap = {};
+    let cursor = 0;
+
+    for (const segment of segments) {
+        const header = segment.trim();
+        if (header) {
+            const x = baseX + cursor * charWidth;
+            headerXMap[header] = x;
+        }
+        cursor += segment.length + 1; // +1 for the pipe
+    }
+
+    return headerXMap;
+};
+
+
 const removeTableBorders = (rows) => {
     return rows.map(row => ({
         text: cleanTableRow(row.text),
@@ -1673,7 +1866,7 @@ const inferHeaderXMap = (tableItems, epsilon = 0.01) => {
     return headerXMap;
 };
 
-const groupItemsByY = (items, epsilon = 0.200) => {
+const groupItemsByY = (items, epsilon) => {
     const grouped = [];
 
     for (const item of items) {

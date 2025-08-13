@@ -1,6 +1,6 @@
 const { spawn } = require("child_process");
 const fs = require("fs");
-const { extractTableFromBuffer, groupRecordsByTransactionId, extractTableFromBufferForBankStatement, extractTableFromBufferForTrailBalance } = require("../utils/tableParser");
+const { groupRecordsByTransactionId, extractTableFromBufferForBankStatement, extractTableFromBufferForTrailBalance } = require("../utils/tableParser");
 // Helper function to compress PDFs
 async function compressPDF(fileBuffer, requestId) {
     const inputFilePath = `/tmp/input-${requestId}.pdf`;
@@ -46,32 +46,48 @@ async function compressPDF(fileBuffer, requestId) {
     });
 }
 
-async function processPDF(fileBuffer, requestId, statementType,bankName,userId,financialYear) {
-    try {
-        console.log(`Processing PDF for Request ID: ${requestId}, Type: ${statementType}`);
+async function processPDF(fileBuffer, requestId, statementType, bankName, userId, financialYear, fileSize) {
+  const inputFilePath = `/tmp/input-${requestId}.pdf`;
 
-        // ✅ Compress PDF before further processing
-        const compressedPDFBuffer = await compressPDF(fileBuffer, requestId);
+  try {
+    console.log(`Processing PDF for Request ID: ${requestId}, Type: ${statementType}`);
 
-        // ✅ Process based on statement type
-        if (statementType === "bank") {
-            const tableDataByPage = await extractTableFromBufferForBankStatement(compressedPDFBuffer,bankName,userId,financialYear);
+    const fileSizeKB = fileSize / 1024;
+    let fileStream;
 
-            console.log(`Extracted Bank Statement Data:`, Object.values(tableDataByPage).reduce((sum, rows) => sum + rows.length, 0));
-
-            return groupRecordsByTransactionId(tableDataByPage);
-
-        } else {
-            const extractedData = await extractTableFromBufferForTrailBalance(compressedPDFBuffer);
-
-            console.log(`🔍 Trial Balance entries extracted: ${extractedData.length}`);
-
-            return extractedData;
-        }
-    } catch (error) {
-        console.error(`Error processing PDF for Request ID ${requestId}:`, error);
-        throw error; // ✅ Properly propagate the error for handling
+    if (fileSizeKB <= 1095) {
+      console.log(`✅ Compressing PDF (size: ${fileSizeKB.toFixed(2)} KB)`);
+      fileStream = await compressPDF(fileBuffer, requestId); // Already stream-ready
+    } else {
+      console.log(`⚠️ Skipping compression (size: ${fileSizeKB.toFixed(2)} KB)`);
+      const fileBufferBytes = await fileBuffer.transformToByteArray();
+      const bufferToProcess = Buffer.from(fileBufferBytes);
+      fs.writeFileSync(inputFilePath, bufferToProcess);
+      fileStream = fs.readFileSync(inputFilePath);
     }
+
+    if (statementType === "bank") {
+      const tableDataByPage = await extractTableFromBufferForBankStatement(fileStream, bankName, userId, financialYear);
+      console.log(`Extracted Bank Statement Data:`, Object.values(tableDataByPage).reduce((sum, rows) => sum + rows.length, 0));
+      return groupRecordsByTransactionId(tableDataByPage);
+    } else {
+      const extractedData = await extractTableFromBufferForTrailBalance(fileStream);
+      console.log(`🔍 Trial Balance entries extracted: ${extractedData.length}`);
+      return extractedData;
+    }
+  } catch (error) {
+    console.error(`Error processing PDF for Request ID ${requestId}:`, error);
+    throw error;
+  } finally {
+    if (fileSize / 1024 > 1100) {
+      try {
+        fs.unlinkSync(inputFilePath);
+      } catch (err) {
+        console.warn("Failed to delete temp file:", err.message);
+      }
+    }
+  }
 }
+
 
 module.exports = { processPDF };
