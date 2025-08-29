@@ -849,6 +849,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
 
             const rawDate = row[lowerMap['date']] || row[lowerMap['value date']] || row[lowerMap['txn date']] || row[lowerMap['transaction']] || row[lowerMap['value']] || row[lowerMap['trans date and']] || row[lowerMap['tran date']] || '';
             const formattedDate = standardizeDate(rawDate);
+            // console.log(rawDate, formattedDate);
 
             const rawDebit = row[lowerMap['debit']] || row[lowerMap['debits']] || row[lowerMap['withdrawal']] || row[lowerMap['withdrawals']] || row[lowerMap['withdra']] || (row[lowerMap['amount(rs.)']]?.includes('Dr') ? row[lowerMap['amount(rs.)']] : '');
             const rawCredit = row[lowerMap['credit']] || row[lowerMap['credits']] || row[lowerMap['deposit']] || row[lowerMap['deposits']] || (row[lowerMap['amount(rs.)']]?.includes('Cr') ? row[lowerMap['amount(rs.)']] : '');
@@ -896,7 +897,19 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                 }
             }
 
-            // Continue with other known formats...
+            // ✅ Match DD-MM-YY or DD/MM/YY
+            const ddmmyyMatch = trimmed.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{2})$/);
+            if (ddmmyyMatch) {
+                const [_, dd, mm, yy] = ddmmyyMatch;
+                const yyyy = parseInt(yy) < 50 ? `20${yy}` : `19${yy}`; // Adjust century logic if needed
+                const isoStr = `${yyyy}-${mm}-${dd}`;
+                const parsed = new Date(isoStr);
+                if (!isNaN(parsed)) {
+                    return `${dd}/${mm}/${yyyy}`;
+                }
+            }
+
+            // Continue with known formats...
             const knownFormats = [
                 { regex: /^\d{2}-[A-Za-z]{3}-\d{4}$/, format: 'DD/MMM/YYYY' },
                 { regex: /^[A-Za-z]{3} \d{2} \d{4}$/, format: 'MMM DD YYYY' },
