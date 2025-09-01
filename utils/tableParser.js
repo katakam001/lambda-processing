@@ -30,6 +30,8 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
             ],
             'SBI': [
                 ['Txn Date', 'Value', 'Description', 'Ref No./Cheque',
+                    'Debit', 'Credit', 'Balance'],
+                ['Post Date', 'Value Date', 'Description', 'Cheque',
                     'Debit', 'Credit', 'Balance']
             ],
             'INDIAN BANK': [
@@ -55,7 +57,13 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
             'CITY UNION BANK': [
                 ["Date", "Particulars", "Chq No", "Debit", "Credit", "Balance"],
                 ["DATE", "DESCRIPTION", "CHEQUE NO", "DEBIT", "CREDIT", "BALANCE"]
-            ]
+            ],
+            'CENTRAL BANK OF INDIA': [
+                ["Value", "Post", "Details", "Chq.No.", "Debit", "Credit", "Balance"]
+            ],
+            'ANDHRA PRADESH GRAMEENA BANK': [
+                ["Post Date", "Value Date", "Details", "Chq no", "Debit", "Credit", "Balance"]
+            ],
             // Add more banks dynamically
         };
 
@@ -72,7 +80,9 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                 'Closing Balance'
             ],
             'SBI': [
-                'Please do not share your ATM, Debit/Credit card number, PIN (Personal Identification Number) and OTP (One Time Password)'
+                'Please do not share your ATM, Debit/Credit card number, PIN (Personal Identification Number) and OTP (One Time Password)',
+                "Page no.",
+                "CLOSING BALANCE"
             ],
             'INDIAN BANK': [
                 'Ending Balance'
@@ -103,6 +113,12 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                 'REGISTERED OFFICE : IDFC FIRST BANK LIMITED, KRM To',
                 /Page\s+\d+\s+Of/i
             ],
+            'CENTRAL BANK OF INDIA': [
+                'CARRIED FORWARD :'
+            ],
+            'ANDHRA PRADESH GRAMEENA BANK': [
+                'Ope Bal'
+            ]
             // Add more banks as needed
         };
 
@@ -116,13 +132,17 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
         const banksToIncludeMergeNarrationLines = ['HDFC BANK']; // add banks as needed
         const banksToIncludeMergeTransactionDetails = ['IDFC FIRST BANK']; // add banks as needed --> validated
         const banksToIncludeCarryForwardLogicToreplaceYAxis = ['IDFC FIRST BANK']; // add banks as needed --> validated
-        const bankshasHeadersInOnePage = ['HDFC BANK', 'ICICI BANK', 'BANK OF INDIA', 'AXIS BANK']; // add banks as needed
+        const bankshasHeadersInOnePage = ['HDFC BANK', 'ICICI BANK', 'BANK OF INDIA', 'AXIS BANK', 'ANDHRA PRADESH GRAMEENA BANK']; // add banks as needed
         const bankToIncludeValidateHeaderWithCustomParameter = ['HDFC BANK', 'BANK OF INDIA', 'AXIS BANK']; // add banks as needed
+        const banksToIncludeRefineCreditAndBalance = ['CENTRAL BANK OF INDIA']; // add banks as needed
         const bankToIncludeValidateHeaderWithTransactionId = ['ICICI BANK']; // add banks as needed
-        const banksToIncludeMergeHeaders = ['CITY UNION BANK']; // add banks as needed
+        const banksToIncludeMergeHeaders = ['CITY UNION BANK', 'ANDHRA PRADESH GRAMEENA BANK']; // add banks as needed
+        const banksToIncludeMergeHeadersInOnePage = ['ANDHRA PRADESH GRAMEENA BANK']; // add banks as needed
+        const banksToIncludeParitalMergeHeaders = ['CENTRAL BANK OF INDIA']; // add banks as needed
         const banksToIncludeHorizontalLine = ['BANK OF INDIA']; // add banks as needed
         const banksToIncludeHeadersInMultipleLines = ['ICICI BANK']; // add banks as needed
         const banksToIncludeHeadernWithEpsilionVaration = ['IDFC FIRST BANK']; // add banks as needed --> validated
+        const banksToIncludeHeadernWithEpsilionVarationWithLatestFormat = ['SBI']; // add banks as needed --> validated
         const banksToIncludeHeadersAlign = ['BANK OF INDIA', 'HDFC BANK']; // add banks as needed
         const banksToIncludeChangeHeadersAlign = ['HDFC BANK']; // add banks as needed
         const banksToIncludeHeadersAlignChangeXAxis = ['AXIS BANK']; // add banks as needed
@@ -144,30 +164,180 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                 const pageKeys = Object.keys(tableDataByPage);
 
                 if (isAFuzzyLogic && banksToIncludeMergeHeaders.includes(bankName)) {
+                    if (banksToIncludeMergeHeadersInOnePage.includes(bankName)) {
+                        const pages = Object.entries(tableDataByPage);
 
-                    const pages = Object.entries(tableDataByPage);
+                        const [firstPageKey, firstPageItems] = pages[0];
+                        // console.log(firstPageKey);
+                        // console.log(Object.keys(headerPositionsByPage[firstPageKey]));
 
-                    // Infer headerXMap only once using the first page
-                    const [firstPageKey, firstPageItems] = pages[0];
-                    const headerXMap = inferHeaderXMap(firstPageItems);
-                    console.log("📌 Inferred header positions from first page:", headerXMap);
+                        // Infer headerXMap only once using the first page
+                        const headerXMap = estimateHeaderPositions(headerPositionsByPage[firstPageKey]['Post Date'], Object.keys(headerPositionsByPage[firstPageKey]));
+                        console.log("📌 Inferred header positions from first page:", headerXMap);
+                        let previousBalance = null;
+                        pages.forEach(([page, items]) => {
 
-                    // Apply this headerXMap across all pages
-                    pages.forEach(([page, items]) => {
-                        // Use the shared headerXMap for each page
-                        console.log(`🧩 Page ${page} headers:`, headerXMap);
-                        headerPositionsByPage[page] = { ...headerXMap };
+                            headerPositionsByPage[page] = { ...headerXMap };
 
-                        const groupByY = groupItemsByY(items, 0.200);
-                        // console.log(groupByY);
+                            const groupByY = parseInt(page) === 1 ? groupItemsByY(tableDataByPage[page], 0.01) : groupItemsByY(rawItemsByPage[page], 0.01);
 
-                        updateGroupsWithAmountItems(groupByY, headerXMap);
-                        updateGroupsWithChequeNo(groupByY, headerXMap);
-                        cleanChequeNoFromAmount(groupByY, headerXMap);
-                        // console.log(groupByY);
-                        const flattened = Object.values(groupByY).flat();
-                        tableDataByPage[page] = flattened;
+                            // console.log(groupByY);
 
+                            const extractedBalance = extractPreviousBalance(groupByY);
+
+                            if (extractedBalance) {
+                                previousBalance = extractedBalance;
+                            } else if (previousBalance) {
+                                // Retain previous value and type, but drop y and raw
+                                previousBalance = {
+                                    value: previousBalance.value,
+                                    type: previousBalance.type
+                                };
+                            }
+
+                            const allParsedItems = [];
+
+                            let statementFound = false;
+
+                            for (const [yKey, items] of Object.entries(groupByY)) {
+                                const yValue = parseFloat(yKey);
+
+                                // Skip BROUGHT FORWARD row
+                                if (previousBalance && yValue <= previousBalance.y) continue;
+
+                                // If previousBalance is missing, wait until "Statement of Account" is found
+                                if (!previousBalance.y && !statementFound) {
+                                    const hasStatement = items.some(i => i.text.includes('Statement of Account'));
+                                    if (hasStatement) {
+                                        statementFound = true;
+                                        continue; // skip this row too
+                                    } else {
+                                        continue; // skip this row
+                                    }
+                                }
+                                // console.log(items);
+
+                                for (const item of items) {
+                                    const parsed = parseTransactionRow(item, previousBalance?.value ?? 0, headerPositionsByPage[page]);
+                                    allParsedItems.push(...parsed);
+
+                                    const balanceItem = parsed.find(p => p.x === headerPositionsByPage[page]['Balance']);
+                                    // console.log(balanceItem);
+                                    if (previousBalance && balanceItem) {
+                                        previousBalance.value = parseFloat(balanceItem.text.replace(/(Cr|Dr)/, '').replace(/,/g, ''));
+                                    }
+                                }
+                            }
+
+                            // console.log(allParsedItems);
+                            tableDataByPage[page] = allParsedItems;
+                        });
+
+
+                    } else {
+                        const pages = Object.entries(tableDataByPage);
+
+                        // Infer headerXMap only once using the first page
+                        const [firstPageKey, firstPageItems] = pages[0];
+                        const headerXMap = inferHeaderXMap(firstPageItems);
+                        console.log("📌 Inferred header positions from first page:", headerXMap);
+
+                        // Apply this headerXMap across all pages
+                        pages.forEach(([page, items]) => {
+                            // Use the shared headerXMap for each page
+                            console.log(`🧩 Page ${page} headers:`, headerXMap);
+                            headerPositionsByPage[page] = { ...headerXMap };
+
+                            const groupByY = groupItemsByY(items, 0.200);
+                            // console.log(groupByY);
+
+                            updateGroupsWithAmountItems(groupByY, headerXMap);
+                            updateGroupsWithChequeNo(groupByY, headerXMap);
+                            cleanChequeNoFromAmount(groupByY, headerXMap);
+                            // console.log(groupByY);
+                            const flattened = Object.values(groupByY).flat();
+                            tableDataByPage[page] = flattened;
+
+                        });
+                    }
+                }
+                if (!isAFuzzyLogic && banksToIncludeMergeHeadersInOnePage.includes(bankName)) {
+                    const firstHeaderPositions = headerPositionsByPage[1]; // Assuming page 1 always has headers
+                    // console.log(firstHeaderPositions);
+                    let previousBalance = null;
+
+                    Object.keys(tableDataByPage).forEach(page => {
+                        const groupByY = parseInt(page) === 1 ? groupItemsByY(tableDataByPage[page], 0.01) : groupItemsByY(rawItemsByPage[page], 0.01);
+                        const extractedBalance = extractPreviousBalance(groupByY);
+                        if (extractedBalance) {
+                            previousBalance = extractedBalance;
+                        } else if (previousBalance) {
+                            // Retain previous value and type, but drop y and raw
+                            previousBalance = {
+                                value: previousBalance.value,
+                                type: previousBalance.type
+                            };
+                        }
+                        if (parseInt(page) === 1) return; // ⛔ Skip Page 1 — already handled
+                        // Clone all positions from Page 1
+                        headerPositionsByPage[page] = { ...firstHeaderPositions };
+                        const allParsedItems = [];
+
+                        let statementFound = false;
+                        for (const [yKey, items] of Object.entries(groupByY)) {
+                            const yValue = parseFloat(yKey);
+
+                            // Skip BROUGHT FORWARD row
+                            if (previousBalance && yValue <= previousBalance.y) continue;
+
+                            // If previousBalance is missing, wait until "Statement of Account" is found
+                            if (!previousBalance.y && !statementFound) {
+                                const hasStatement = items.some(i => i.text.includes('Statement of Account'));
+                                if (hasStatement) {
+                                    statementFound = true;
+                                    continue; // skip this row too
+                                } else {
+                                    continue; // skip this row
+                                }
+                            }
+                            // console.log(items);
+                            allParsedItems.push(...items);
+
+                        }
+                        const validRowGroup = Object.values(groupItemsByY(allParsedItems, 0.01)).find(group => {
+                            if (group.length < 1) return false;
+
+                            let dateCount = 0;
+                            let amountCount = 0;
+                            let textCount = 0;
+
+                            group.forEach(({ text }) => {
+                                const txt = text.trim();
+
+                                if (/^\d{2}\/\d{2}\/\d{2}$/.test(txt)) {
+                                    dateCount++;
+                                } else if (/^\d+\.\d{2}$/.test(txt)) {
+                                    amountCount++;
+                                    // Match narration: must contain letters and not be a balance
+                                } else if (/[a-zA-Z]/.test(txt) && !/\.\d{2}(Cr|Dr)$/.test(txt)) {
+                                    textCount++;
+                                }
+
+                            });
+
+                            // Case 1: Full transaction row
+                            const isTransactionRow = dateCount >= 2 && amountCount >= 1 && textCount >= 1;
+
+                            // Case 2: Narration-only row
+                            const isNarrationOnly = dateCount === 0 && amountCount === 0 && textCount >= 1;
+
+                            return isTransactionRow || isNarrationOnly;
+                        });
+                        if (validRowGroup) {
+                            tableDataByPage[page] = allParsedItems;
+                        }
+                        // console.log(headerPositionsByPage[page]);
+                        // console.log(tableDataByPage[page]);
                     });
 
                 }
@@ -211,7 +381,82 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
 
                 }
 
-                if (bankshasHeadersInOnePage.includes(bankName)) {
+                if (banksToIncludeParitalMergeHeaders.includes(bankName)) {
+                    const pages = Object.entries(tableDataByPage);
+                    const [firstPageKey, firstPageItems] = pages[0];
+
+                    const debitX = headerPositionsByPage[firstPageKey]['Debit'];
+                    const creditX = headerPositionsByPage[firstPageKey]['Credit'];
+                    const balanceX = headerPositionsByPage[firstPageKey]['Balance'];
+
+                    const allEqual = debitX === creditX && creditX === balanceX;
+                    if (allEqual) {
+                        const groupByY = groupItemsByY(firstPageItems, 0.01);
+                        const cleanGroupByYAxis = cleanGroupedByYAxis(groupByY);
+                        const filteredData = filterAfterBroughtForward(cleanGroupByYAxis);
+                        const validRowGroup = Object.values(filteredData).find(group => {
+                            if (group.length < 6) return false;
+
+                            let dateCount = 0;
+                            let amountCount = 0;
+                            let textCount = 0;
+                            let balanceCount = 0;
+
+                            group.forEach(({ text }) => {
+                                const txt = text.trim();
+
+                                if (/^\d{2}\/\d{2}\/\d{2}$/.test(txt)) {
+                                    dateCount++;
+                                } else if (/^\d+\.\d{2}$/.test(txt)) {
+                                    amountCount++;
+                                    // Match narration: must contain letters and not be a balance
+                                } else if (/[a-zA-Z]/.test(txt) && !/\.\d{2}(Cr|Dr)$/.test(txt)) {
+                                    textCount++;
+                                } else if (/\.\d{2}(Cr|Dr)$/.test(txt)) {
+                                    balanceCount++;
+                                }
+
+                            });
+
+                            return dateCount >= 2 && amountCount >= 1 && textCount >= 1 && balanceCount >= 1;
+
+                        });
+                        const balanceRegex = /\.\d{2}(Cr|Dr)$/;
+
+                        for (const item of validRowGroup) {
+                            const txt = item.text.trim();
+                            if (balanceRegex.test(txt)) {
+                                headerPositionsByPage[firstPageKey]['Balance'] = item.x;
+                                break; // assuming only one balance per row
+                            }
+                        }
+
+                        if (headerPositionsByPage[firstPageKey]['Balance']) {
+                            const debitX = headerPositionsByPage[firstPageKey]['Debit'];
+                            const estimatedGap = (headerPositionsByPage[firstPageKey]['Balance'] - debitX) / 3;
+                            const creditX = debitX + estimatedGap;
+                            headerPositionsByPage[firstPageKey]['Credit'] = creditX;
+                        }
+                    }
+                    pages.forEach(([page, items]) => {
+
+                        if (allEqual && parseInt(page) > 1) {
+                            headerPositionsByPage[page]['Credit'] = headerPositionsByPage[firstPageKey]['Credit'];
+                            headerPositionsByPage[page]['Balance'] = headerPositionsByPage[firstPageKey]['Balance'];
+                        }
+
+                        // 📐 Group by Y-axis
+                        const groupByY = groupItemsByY(items, 0.01);
+                        const cleanGroupByYAxis = cleanGroupedByYAxis(groupByY);
+                        const filteredData = filterAfterBroughtForward(cleanGroupByYAxis);
+                        const mergeSplitAmountData = mergeAmountFragments(filteredData, headerPositionsByPage[page]);
+                        const mergeSplitBalanceData = mergeBalanceFragments(mergeSplitAmountData, headerPositionsByPage[page]);
+                        const flattened = Object.values(mergeSplitBalanceData).flat();
+                        tableDataByPage[page] = flattened;
+                    });
+                }
+
+                if (!isAFuzzyLogic && bankshasHeadersInOnePage.includes(bankName)) {
 
                     Object.entries(rawItemsByPage).forEach(([page, items]) => {
 
@@ -344,7 +589,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                     });
                 }
 
-                // // console.log("header cloned");
+                // console.log("header cloned");
 
                 pageKeys.forEach((page, index) => {
 
@@ -372,10 +617,17 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                             snapToColumn(item, columnXMap)
                         );
                     }
-                    //     console.log(snappedTableData);
+                    // console.log(snappedTableData);
 
                     if (banksToIncludeHeadersAlignChangeXAxis.includes(bankName)) {
                         snappedTableData = snapXCoordinate(snappedTableData, columnXMap["Chq No"], columnXMap["Particulars"], 0.1);
+                    }
+
+                    if (banksToIncludeRefineCreditAndBalance.includes(bankName)) {
+
+                        snappedTableData = snappedTableData.map(item =>
+                            refineAmountSnappedToBalance(item, columnXMap["Credit"], columnXMap["Balance"])
+                        );
                     }
 
                     if (banksToIncludeRefineDateAndNarration.includes(bankName) && columnXMap["Transaction Details"]) {
@@ -548,6 +800,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                     // Convert to JSON
                     // console.log(`Page ${page} Table Data:`, tableJSON);
                     combinedTableData[page] = normalizeBankPDF(tableJSON, bankName, userId, financialYear);
+                    // console.log(combinedTableData[page]);
                 });
                 resolve(combinedTableData);
             } else if (item.page) {
@@ -613,11 +866,62 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                         }
                     }
                 }
+                if (banksToIncludeParitalMergeHeaders.includes(bankName)) {
+                    for (const headerSet of headerVariants) {
+                        const trimmedText = decodedText.trim();
+
+                        // Split merged headers by whitespace
+                        const splitHeaders = trimmedText.split(/\s{2,}/).map(h => h.trim()).filter(Boolean);
+
+                        for (const header of splitHeaders) {
+                            if (headerSet.includes(header)) {
+                                if (headerY === null) {
+                                    headerY = item.y;
+                                }
+
+                                if (Math.abs(item.y - headerY) <= epsilon) {
+                                    detectedHeaders.add(header);
+
+                                    if (banksToIncludeHeadersInMultipleLines.includes(bankName)) {
+                                        if (!headerPositionsByPage[currentPage].hasOwnProperty(header)) {
+                                            headerPositionsByPage[currentPage][header] = item.x;
+                                        }
+                                    } else {
+                                        headerPositionsByPage[currentPage][header] = item.x;
+                                    }
+                                }
+                            }
+                        }
+
+                        // Check if all headers in the set are detected
+                        if (!headersFound && (detectedHeaders.size === headerSet.length && headerSet.every(h => detectedHeaders.has(h)))) {
+                            if (headerPositionsByPage[currentPage]['Balance']) {
+                                const debitX = headerPositionsByPage[currentPage]['Debit'];
+                                const estimatedGap = (headerPositionsByPage[currentPage]['Balance'] - debitX) / 3;
+                                const creditX = debitX + estimatedGap;
+                                headerPositionsByPage[currentPage]['Credit'] = creditX;
+                            }
+
+                            for (const header of headerSet) {
+                                alignments[header] = detectAlignmentFromText(header);
+                            }
+                            headersFound = true;
+                            isAfterTable = false;
+                            tableEndY = null;
+                            console.log(`Headers detected on Page ${currentPage} using format:`, headerSet);
+                            requiredHeaders = headerSet;
+                            break;
+                        }
+                    }
+                }
                 if (banksToIncludeHeadersInMultipleLines.includes(bankName)) {
                     epsilon = 0.5;
                 }
                 if (banksToIncludeHeadernWithEpsilionVaration.includes(bankName)) {
                     epsilon = 0.3;
+                }
+                if (banksToIncludeHeadernWithEpsilionVarationWithLatestFormat.includes(bankName)) {
+                    epsilon = 0.365;
                 }
 
                 for (const headerSet of headerVariants) {
@@ -866,7 +1170,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
 
             // let reference = row[lowerMap['transaction id']] || row[lowerMap['ref no./cheque']] || row[lowerMap['ref/cheque']] || row[lowerMap['cheque no']] || row[lowerMap['cheque no.']] || row[lowerMap['cheque']] || row[lowerMap['chq no']] || row[lowerMap['chq./ref.no.']] || row[lowerMap['chq-no']] || row[lowerMap['id']] || '';
 
-            const description = row[lowerMap['remarks']] || row[lowerMap['description']] || row[lowerMap['narration']] || row[lowerMap['particulars']] || row[lowerMap['transaction details']] || '';
+            const description = row[lowerMap['remarks']] || row[lowerMap['description']] || row[lowerMap['narration']] || row[lowerMap['particulars']] || row[lowerMap['transaction details']] || row[lowerMap['details']] || '';
 
             const finalAmount = finalDebit !== '0.00' ? finalDebit : finalCredit;
             const fingerprint = `${formattedDate}|${description.trim()}|${finalAmount}`;
@@ -1879,6 +2183,22 @@ const inferHeaderXMap = (tableItems, epsilon = 0.01) => {
     return headerXMap;
 };
 
+const estimateHeaderPositions = (startX, headers) => {
+    const positions = {};
+    let currentX = startX;
+
+    for (const header of headers) {
+        positions[header] = currentX;
+
+        // Artificial stretch for 'Details'
+        const stretchFactor = header === 'Details' ? 3 : 1;
+        currentX += header.length * stretchFactor; // 0.5 is assumed char width
+    }
+
+    return positions;
+};
+
+
 const groupItemsByY = (items, epsilon) => {
     const grouped = [];
 
@@ -1902,6 +2222,262 @@ const groupItemsByY = (items, epsilon) => {
     });
 
     return groupedByY;
+};
+
+const cleanGroupedByYAxis = (groupedByYAxis) => {
+    const cleaned = {};
+
+    Object.entries(groupedByYAxis).forEach(([yKey, items]) => {
+        const filteredItems = items
+            .filter(({ text }) => {
+                const trimmed = text.trim();
+                return trimmed !== '' && trimmed !== '.';
+            })
+            .map(({ text, x, y }) => ({
+                text: text.trim(),
+                x,
+                y
+            }));
+
+        if (filteredItems.length > 0) {
+            cleaned[yKey] = filteredItems;
+        }
+    });
+
+    return cleaned;
+};
+
+const filterAfterBroughtForward = (groupedByYAxis) => {
+    const sortedYKeys = Object.keys(groupedByYAxis)
+        .sort((a, b) => parseFloat(a) - parseFloat(b));
+
+    let found = false;
+    const result = {};
+
+    for (const yStr of sortedYKeys) {
+        const items = groupedByYAxis[yStr];
+        if (!items) continue;
+
+        if (!found) {
+            if (items.some(({ text }) => text.trim().startsWith('BROUGHT FORWARD'))) {
+                found = true;
+                continue; // Skip this row too
+            }
+        } else {
+            result[yStr] = items;
+        }
+    }
+
+    return result;
+};
+
+const mergeAmountFragments = (groupedByYAxis, headers) => {
+    const merged = {};
+
+    const debitThresholdX = (headers['Chq.No.'] + headers['Debit']) / 2;
+    const balanceX = headers['Balance'];
+
+    for (const [yKey, items] of Object.entries(groupedByYAxis)) {
+        const row = [];
+        let skipNext = false;
+
+        for (let i = 0; i < items.length; i++) {
+            if (skipNext) {
+                skipNext = false;
+                continue;
+            }
+
+            const current = items[i];
+            const next = items[i + 1];
+            const currentText = current.text.trim();
+            const nextText = next?.text.trim();
+
+            const isInAmountZone = current.x >= debitThresholdX && current.x <= balanceX;
+
+            let mergedText = null;
+
+            if (isInAmountZone) {
+
+                if (/^[\d,]+$/.test(currentText) && /^\d*\.\d{1,2}$/.test(nextText)) {
+                    mergedText = `${currentText}${nextText}`;
+                } else if (/^\d+\.\d$/.test(currentText) && /^\d$/.test(nextText)) {
+                    mergedText = `${currentText}${nextText}`;
+                } else if (/^\d+\.$/.test(currentText) && /^\d{2}$/.test(nextText)) {
+                    mergedText = `${currentText}${nextText}`;
+                } else if (/^[\d,]+\.\d$/.test(currentText) && /^\d$/.test(nextText)) {
+                    mergedText = `${currentText}${nextText}`;
+                } else if (/^[\d,]+$/.test(currentText) && /^\.\d{2}$/.test(nextText)) {
+                    mergedText = `${currentText}${nextText}`;
+                }
+
+            }
+
+            if (mergedText) {
+                row.push({ text: mergedText, x: current.x, y: current.y });
+                skipNext = true;
+            } else {
+                row.push(current);
+            }
+        }
+
+        merged[yKey] = row;
+    }
+
+    return merged;
+};
+
+const mergeBalanceFragments = (groupedByYAxis, headers) => {
+    const merged = {};
+    const balanceX = headers['Balance'];
+
+    for (const [yKey, items] of Object.entries(groupedByYAxis)) {
+        const row = [];
+        let skipNext = false;
+
+        for (let i = 0; i < items.length; i++) {
+            if (skipNext) {
+                skipNext = false;
+                continue;
+            }
+
+            const current = items[i];
+            const next = items[i + 1];
+            const currentText = current.text.trim();
+            const nextText = next?.text.trim();
+
+            const isInBalanceZone = current.x >= balanceX;
+
+            let mergedText = null;
+
+            if (isInBalanceZone) {
+                // Case: '3,52,746.05' + 'Cr'
+                if (/^\d{1,3}(,\d{2,3})*(\.\d{2})?$/.test(currentText) && /^(Cr|Dr)$/.test(nextText)) {
+                    mergedText = `${currentText}${nextText}`;
+                }
+
+                // Case: '2,69' + '6.55Cr' → '2,696.55Cr'
+                else if (/^\d{1,3}(,\d{2,3})*$/.test(currentText) && /^\d+\.\d{2}(Cr|Dr)$/.test(nextText)) {
+                    mergedText = `${currentText}${nextText}`;
+                }
+            }
+
+            if (mergedText) {
+                row.push({ text: mergedText, x: current.x, y: current.y });
+                skipNext = true;
+            } else {
+                row.push(current);
+            }
+        }
+
+        merged[yKey] = row;
+    }
+
+    return merged;
+};
+
+const parseTransactionRow = (item, previousBalance, headerPositions) => {
+    const { text, y } = item;
+    const output = [];
+
+    // Extract dates
+    const dateMatches = text.match(/\d{2}\/\d{2}\/\d{2}/g);
+    if (dateMatches?.[0]) {
+        output.push({ text: dateMatches[0], x: headerPositions['Post Date'], y });
+    }
+    if (dateMatches?.[1]) {
+        output.push({ text: dateMatches[1], x: headerPositions['Value Date'], y });
+    }
+
+    // Extract balance
+    let balanceValue = null;
+    let balanceText = extractBalanceFromText(text);
+    if (balanceText) {
+        output.push({ text: balanceText, x: headerPositions['Balance'], y });
+        balanceValue = parseFloat(balanceText.replace(/(Cr|Dr)/, '').replace(/,/g, ''));
+    }
+
+    // Infer amount via delta
+    let inferredAmount = null;
+    let type = null;
+    if (balanceValue !== null && typeof previousBalance === 'number') {
+        const delta = balanceValue - previousBalance;
+        inferredAmount = Math.abs(delta).toFixed(2);
+        type = delta > 0 ? 'Credit' : 'Debit';
+
+        // Confirm amount exists in text
+        if (text.includes(inferredAmount)) {
+            const amountX = headerPositions[type];
+            output.push({ text: inferredAmount, x: amountX, y });
+        }
+    }
+
+    // Extract cheque number
+    const chqMatch = text.match(/CHQ(\d+)(?=\d+\.\d{2})/);
+    if (chqMatch?.[1]) {
+        output.push({ text: chqMatch[1], x: headerPositions['Chq no'], y });
+    }
+
+    // Extract details
+    const valueDate = dateMatches?.[1];
+    let detailsStart = null;
+
+    if (valueDate) {
+        const firstIndex = text.indexOf(valueDate);
+        const secondIndex = text.indexOf(valueDate, firstIndex + valueDate.length);
+        detailsStart = secondIndex !== -1 ? secondIndex + valueDate.length : firstIndex + valueDate.length;
+    }
+    const detailsEnd = chqMatch?.index || text.indexOf(inferredAmount) || text.indexOf(balanceText);
+    if (detailsStart !== null && detailsEnd > detailsStart) {
+        const detailsText = text.slice(detailsStart, detailsEnd).trim();
+        output.push({ text: detailsText, x: headerPositions['Details'], y });
+    }
+
+    // Fallback: if nothing was extracted, treat as orphaned narration
+    if (output.length === 0 && text.trim()) {
+        output.push({ text: text.trim(), x: headerPositions['Details'], y });
+    }
+
+    // Sort output by x-coordinate
+    return output.sort((a, b) => a.x - b.x);
+};
+
+const extractBalanceFromText = (text) => {
+    const decimalMatches = [...text.matchAll(/\d+\.\d{2}/g)];
+
+    if (decimalMatches.length < 2) return null; // not enough decimals to infer balance
+
+    const firstDecimal = decimalMatches[0];
+    const secondDecimal = decimalMatches[1];
+
+    const balanceStart = secondDecimal.index;
+    const balanceText = text.slice(balanceStart).trim();
+
+    // Validate it ends with Cr or Dr
+    if (/^\d+\.\d{2}(Cr|Dr)$/.test(balanceText)) {
+        return balanceText;
+    }
+
+    return null;
+};
+
+
+const extractPreviousBalance = (groupedByY) => {
+    for (const [y, items] of Object.entries(groupedByY)) {
+        const hasBrought = items.some(i => i.text.toUpperCase().includes('BROUGHT'));
+        const hasForward = items.some(i => i.text.toUpperCase().includes('FORWARD'));
+
+        // Match any decimal with 2 digits (with or without Cr/Dr)
+        const balanceItem = items.find(i => /\d{1,3}(,\d{2,3})*\.\d{2}(Cr|Dr)?$/.test(i.text));
+
+        if (hasBrought && hasForward && balanceItem) {
+            const raw = balanceItem.text;
+            const value = parseFloat(raw.replace(/(Cr|Dr)/, '').replace(/,/g, ''));
+            const type = raw.endsWith('Cr') ? 'Cr' : raw.endsWith('Dr') ? 'Dr' : null;
+            return { value, type, y: parseFloat(y), raw };
+        }
+    }
+
+    return null;
 };
 
 const updateGroupsWithAmountItems = (groupedByY, headerXMap) => {
@@ -2159,6 +2735,21 @@ const refineValueDateAndParticulars = (
 
     return item;
 };
+
+const refineAmountSnappedToBalance = (item, amountX, balanceX) => {
+    const text = item.text.trim();
+
+    const isBalance = /(Cr|Dr)$/.test(text);
+    const isAmount = /^[\d,]+(\.\d{1,2})?$/.test(text);
+
+    // If it's not a balance but looks like an amount, snap it back
+    if (item.x === balanceX && !isBalance && isAmount) {
+        return { ...item, x: amountX };
+    }
+
+    return item;
+};
+
 
 const refineYAxisOfParticularsWithDate = (
     item,
