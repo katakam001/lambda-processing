@@ -61,6 +61,19 @@ async function sendMessagesInBatch(records, metadata, fileType) {
 
             entries.push(...batch);
         }
+    } else if (fileType === "json") {
+        const message = {
+            Id: "msg-0",
+            MessageBody: JSON.stringify(records[0]), // single status object
+            MessageAttributes: {
+                userId: { DataType: "String", StringValue: metadata.userid },
+                fileType: { DataType: "String", StringValue: metadata.filetype },
+                financialYear: { DataType: "String", StringValue: metadata.financialyear },
+                status: { DataType: "String", StringValue: "PDF generated" }
+            }
+        };
+
+        entries.push(message);
     }
 
     //  Send messages to SQS in batches

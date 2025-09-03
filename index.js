@@ -1,7 +1,10 @@
 const { processPDF } = require("./services/pdfProcessor");
 const { processCSV } = require("./services/invoiceProcessor"); // ✅ Import CSV processing function
 const { sendMessagesInBatch } = require("./services/sqsService");
-const { getFileFromS3 } = require("./services/s3Service");
+const { getFileFromS3, uploadFileToS3 } = require("./services/s3Service");
+const { generatePDFToFile } = require("./services/pdfGenerator");
+const { streamToString } = require("./utils/streamUtils");
+
 
 exports.handler = async (event, context) => {
     try {
@@ -26,7 +29,7 @@ exports.handler = async (event, context) => {
             console.log("User ID", metadata.userid);
             console.log("Financial Year:", metadata.financialyear);
             console.log("File Size:", metadata.filesize);
-            const groupedRecords = await processPDF(fileData.Body, context.awsRequestId,metadata.statementtype,metadata.bankname,metadata.userid,metadata.financialyear,metadata.filesize);
+            const groupedRecords = await processPDF(fileData.Body, context.awsRequestId, metadata.statementtype, metadata.bankname, metadata.userid, metadata.financialyear, metadata.filesize);
             await sendMessagesInBatch(groupedRecords, metadata, fileType);
         } else if (fileName.endsWith(".csv")) {
             fileType = "csv";
@@ -37,7 +40,39 @@ exports.handler = async (event, context) => {
             console.log("Tax Type:", metadata.taxtype);
             const extractedRecords = await processCSV(fileData.Body);
             await sendMessagesInBatch(extractedRecords, metadata, fileType);
+        } else if (fileName.endsWith(".json")) {
+            fileType = "json";
+            console.log("🧾 Generating PDF from JSON...");
+
+            const rawJson = await streamToString(fileData.Body);
+            const jsonContent = JSON.parse(rawJson);
+            const fileName = `daybook_${context.awsRequestId}.pdf`;
+            const outputPath = await generatePDFToFile(jsonContent, fileName);
+            const pdfStream = fs.createReadStream(outputPath);
+
+            const outputKey = fileName
+                .replace("daybook_", "")
+                .replace(".pdf", "")
+                .replace(context.awsRequestId, metadata.userid + "_" + metadata.filetype + "_" + metadata.financialyear) + ".pdf";
+
+            await uploadFileToS3(bucketName, `pdf-outputs/${metadata.userid}/${outputKey}`, pdfStream, "application/pdf", {
+                userId: metadata.userid,
+                fileType: metadata.filetype,
+                financialYear: metadata.financialyear
+            });
+
+            console.log("✅ PDF uploaded to:", outputKey);
+
+            await sendMessagesInBatch([
+                {
+                    fileName,
+                    status: "PDF generated",
+                    outputKey: `pdf-outputs/${metadata.userid}/${outputKey}`,
+                    timestamp: new Date().toISOString()
+                }
+            ], metadata, fileType);
         }
+
 
         return { statusCode: 200, body: "File processed successfully" };
     } catch (error) {

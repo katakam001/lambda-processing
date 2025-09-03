@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Daybook Report</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    tr {
+      height: 30px; /* Set a consistent height for all rows */
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 4px;
+    }
+    td {
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+    th {
+      background-color: #f2f2f2;
+      text-align: center; /* Center align the header */
+      border: 2px solid #000; /* Thicker border for bold lines */
+    }
+    td.right-align {
+      text-align: right;
+    }
+    .bold-border {
+      border-top: 2px solid #000; /* Thicker top border for bold lines */
+    }
+    .date {
+      font-weight: bold;
+      margin-top: 20px;
+      text-align: center; /* Center align the date */
+    }
+    tr {
+      page-break-inside: avoid;
+      page-break-after: auto;
+    }
+    thead {
+      display: table-header-group;
+    }
+    tfoot {
+      display: table-footer-group;
+    }
+  </style>
+</head>
+<body>
+  <h1>Daybook Report</h1>
+  {{#each filteredEntries}}
+  <div class="date center-align">{{this.date}}</div>
+  <table>
+    <thead class="bold-border">
+      <tr>
+        <th>Cash Credit</th>
+        <th>Journal Credit</th>
+        <th>Particular (Account Name)</th>
+        <th>Journal Debit</th>
+        <th>Cash Debit</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each this.entries}}
+      <tr>
+        <td class="right-align">{{this.cashCredit}}</td>
+        <td class="right-align">{{this.journalCredit}}</td>
+        <td>{{this.particular}}</td>
+        <td class="right-align">{{this.journalDebit}}</td>
+        <td class="right-align">{{this.cashDebit}}</td>
+      </tr>
+      {{/each}}
+      <tr class="bold-border">
+        <td class="right-align">{{this.totalCashCredit}}</td>
+        <td class="right-align">{{this.totalJournalCredit}}</td>
+        <td></td>
+        <td class="right-align">{{this.totalJournalDebit}}</td>
+        <td class="right-align">{{this.totalCashDebit}}</td>
+      </tr>
+      <tr>
+        <td class="right-align">{{this.totalCashDebit}}</td>
+        <td class="right-align">{{this.totalJournalDebit}}</td>
+        <td></td>
+        <td></td>
+        <td></td>
+      </tr>
+      <tr class="bold-border">
+        <td class="right-align">{{this.balanceCarryForward}}</td>
+        <td class="right-align">{{this.journalBalanceCarryForward}}</td>
+        <td>Balance Carry forward</td>
+        <td></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+  {{/each}}
+</body>
+</html>
