@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const puppeteer = require("chrome-aws-lambda");
+const puppeteer = require("puppeteer-core");
 const Handlebars = require("handlebars");
 
 function buildHtmlTemplate(data) {
@@ -15,9 +15,8 @@ async function generatePDFToFile(data, fileName) {
     const html = buildHtmlTemplate(data);
     const outputPath = path.join("/tmp", fileName); // Lambda-safe path
 
-    const browser = await puppeteer.puppeteer.launch({
+    const browser = await puppeteer.launch({
       args: [
-        ...puppeteer.args,
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
