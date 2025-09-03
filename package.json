@@ -2,8 +2,10 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.808.0",
     "@aws-sdk/client-sqs": "^3.812.0",
+    "chrome-aws-lambda": "^10.1.0",
     "csv-parser": "^3.2.0",
-    "pdf-creator-node": "^2.3.5",
-    "pdfreader": "^3.0.7"
+    "handlebars": "^4.7.8",
+    "pdfreader": "^3.0.7",
+    "puppeteer-core": "^10.4.0"
   }
 }
