@@ -1,9 +1,8 @@
 const { processPDF } = require("./services/pdfProcessor");
 const { processCSV } = require("./services/invoiceProcessor"); // ✅ Import CSV processing function
 const { sendMessagesInBatch } = require("./services/sqsService");
-const { getFileFromS3, uploadFileToS3 } = require("./services/s3Service");
-const { generatePDFToFile } = require("./services/pdfGenerator");
-const { streamToString } = require("./utils/streamUtils");
+const { getFileFromS3 } = require("./services/s3Service");
+const { exportDaybookToPDF } = require('./services/exportService');
 
 
 exports.handler = async (event, context) => {
@@ -44,31 +43,17 @@ exports.handler = async (event, context) => {
             fileType = "json";
             console.log("🧾 Generating PDF from JSON...");
 
-            const rawJson = await streamToString(fileData.Body);
-            const jsonContent = JSON.parse(rawJson);
-            const fileName = `daybook_${context.awsRequestId}.pdf`;
-            const outputPath = await generatePDFToFile(jsonContent, fileName);
-            const pdfStream = fs.createReadStream(outputPath);
+            const result = await exportDaybookToPDF({ fileData, metadata, awsRequestId: context.awsRequestId, bucketName });
 
-            const outputKey = fileName
-                .replace("daybook_", "")
-                .replace(".pdf", "")
-                .replace(context.awsRequestId, metadata.userid + "_" + metadata.filetype + "_" + metadata.financialyear) + ".pdf";
-
-            await uploadFileToS3(bucketName, `pdf-outputs/${metadata.userid}/${outputKey}`, pdfStream, "application/pdf", {
-                userId: metadata.userid,
-                fileType: metadata.filetype,
-                financialYear: metadata.financialyear
-            });
-
-            console.log("✅ PDF uploaded to:", outputKey);
+            const status = result.success ? 2 : 6;
 
             await sendMessagesInBatch([
                 {
-                    fileName,
-                    status: "PDF generated",
-                    outputKey: `pdf-outputs/${metadata.userid}/${outputKey}`,
-                    timestamp: new Date().toISOString()
+                    exportId: metadata.exportid,
+                    fileName: result.fileName,
+                    status,
+                    outputKey: result.outputKey,
+                    timestamp: result.timestamp
                 }
             ], metadata, fileType);
         }

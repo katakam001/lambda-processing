@@ -11,8 +11,10 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
         let headersFound = false; // Track if all headers are found
         let headerY = null; // Y-coordinate of the header row
         let tableEndY = null;
+        const tableEndYByPage = {};
         let isAfterTable = false; // Flag to ignore rows after "Details of statement"
         let isAFuzzyLogic = false;
+        let isParitalHeader = false;
         let isHorizontalLineDetected = false;
         let epsilon = 0.1; // Tolerance for y-position comparison
         const bankHeaders = {
@@ -30,6 +32,8 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
             ],
             'SBI': [
                 ['Txn Date', 'Value', 'Description', 'Ref No./Cheque',
+                    'Debit', 'Credit', 'Balance'],
+                ['Txn Date', 'Value Date', 'Description', 'Ref/Cheque',
                     'Debit', 'Credit', 'Balance'],
                 ['Post Date', 'Value Date', 'Description', 'Cheque',
                     'Debit', 'Credit', 'Balance']
@@ -59,9 +63,10 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                 ["DATE", "DESCRIPTION", "CHEQUE NO", "DEBIT", "CREDIT", "BALANCE"]
             ],
             'CENTRAL BANK OF INDIA': [
-                ["Value", "Post", "Details", "Chq.No.", "Debit", "Credit", "Balance"]
+                ["Value", "Post", "Details", "Chq.No.", "Debit", "Credit", "Balance"],
+                ["Post Date", "Value", "Branch", "Cheque", "Account Description", "Debit", "Credit", "Balance"]
             ],
-            'ANDHRA PRADESH GRAMEENA BANK': [
+            'ANDHRA PRAGATHI GRAMEENA BANK': [
                 ["Post Date", "Value Date", "Details", "Chq no", "Debit", "Credit", "Balance"]
             ],
             // Add more banks dynamically
@@ -81,6 +86,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
             ],
             'SBI': [
                 'Please do not share your ATM, Debit/Credit card number, PIN (Personal Identification Number) and OTP (One Time Password)',
+                'Please do not share your ATM Debit/Credit card numbe',
                 "Page no.",
                 "CLOSING BALANCE"
             ],
@@ -114,9 +120,10 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                 /Page\s+\d+\s+Of/i
             ],
             'CENTRAL BANK OF INDIA': [
-                'CARRIED FORWARD :'
+                'CARRIED FORWARD :',
+                /^Statement\s+Downloaded\s+By\s+(.+)$/
             ],
-            'ANDHRA PRADESH GRAMEENA BANK': [
+            'ANDHRA PRAGATHI GRAMEENA BANK': [
                 'Ope Bal'
             ]
             // Add more banks as needed
@@ -132,17 +139,19 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
         const banksToIncludeMergeNarrationLines = ['HDFC BANK']; // add banks as needed
         const banksToIncludeMergeTransactionDetails = ['IDFC FIRST BANK']; // add banks as needed --> validated
         const banksToIncludeCarryForwardLogicToreplaceYAxis = ['IDFC FIRST BANK']; // add banks as needed --> validated
-        const bankshasHeadersInOnePage = ['HDFC BANK', 'ICICI BANK', 'BANK OF INDIA', 'AXIS BANK', 'ANDHRA PRADESH GRAMEENA BANK']; // add banks as needed
+        const bankshasHeadersInOnePage = ['HDFC BANK', 'ICICI BANK', 'BANK OF INDIA', 'AXIS BANK', 'ANDHRA PRAGATHI GRAMEENA BANK']; // add banks as needed
         const bankToIncludeValidateHeaderWithCustomParameter = ['HDFC BANK', 'BANK OF INDIA', 'AXIS BANK']; // add banks as needed
         const banksToIncludeRefineCreditAndBalance = ['CENTRAL BANK OF INDIA']; // add banks as needed
+        const banksToIncludeRefineChequeAndAccountDescription = ['CENTRAL BANK OF INDIA']; // add banks as needed
         const bankToIncludeValidateHeaderWithTransactionId = ['ICICI BANK']; // add banks as needed
-        const banksToIncludeMergeHeaders = ['CITY UNION BANK', 'ANDHRA PRADESH GRAMEENA BANK']; // add banks as needed
-        const banksToIncludeMergeHeadersInOnePage = ['ANDHRA PRADESH GRAMEENA BANK']; // add banks as needed
+        const banksToIncludeMergeHeaders = ['CITY UNION BANK', 'ANDHRA PRAGATHI GRAMEENA BANK']; // add banks as needed
+        const banksToIncludeMergeHeadersInOnePage = ['ANDHRA PRAGATHI GRAMEENA BANK']; // add banks as needed
         const banksToIncludeParitalMergeHeaders = ['CENTRAL BANK OF INDIA']; // add banks as needed
         const banksToIncludeHorizontalLine = ['BANK OF INDIA']; // add banks as needed
         const banksToIncludeHeadersInMultipleLines = ['ICICI BANK']; // add banks as needed
         const banksToIncludeHeadernWithEpsilionVaration = ['IDFC FIRST BANK']; // add banks as needed --> validated
         const banksToIncludeHeadernWithEpsilionVarationWithLatestFormat = ['SBI']; // add banks as needed --> validated
+        const banksToFilterUnnecessaryDataWithtableEndY = ['SBI']; // add banks as needed --> validated
         const banksToIncludeHeadersAlign = ['BANK OF INDIA', 'HDFC BANK']; // add banks as needed
         const banksToIncludeChangeHeadersAlign = ['HDFC BANK']; // add banks as needed
         const banksToIncludeHeadersAlignChangeXAxis = ['AXIS BANK']; // add banks as needed
@@ -162,6 +171,15 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                 // End of buffer - process and resolve table data
                 const combinedTableData = {};
                 const pageKeys = Object.keys(tableDataByPage);
+                if (banksToFilterUnnecessaryDataWithtableEndY.includes(bankName)) {
+                    const pages = Object.entries(tableDataByPage);
+                    pages.forEach(([page, items]) => {
+                        const groupByY = groupItemsByY(tableDataByPage[page], 0.01);
+                        const filteredGroups = filterGroupedByY(groupByY, tableEndYByPage[page]);
+                        const flattened = Object.values(filteredGroups).flat();
+                        tableDataByPage[page] = flattened;
+                    });
+                }
 
                 if (isAFuzzyLogic && banksToIncludeMergeHeaders.includes(bankName)) {
                     if (banksToIncludeMergeHeadersInOnePage.includes(bankName)) {
@@ -381,7 +399,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
 
                 }
 
-                if (banksToIncludeParitalMergeHeaders.includes(bankName)) {
+                if (isParitalHeader && banksToIncludeParitalMergeHeaders.includes(bankName)) {
                     const pages = Object.entries(tableDataByPage);
                     const [firstPageKey, firstPageItems] = pages[0];
 
@@ -630,6 +648,13 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                         );
                     }
 
+                    if (banksToIncludeRefineChequeAndAccountDescription.includes(bankName)) {
+
+                        snappedTableData = snappedTableData.map(item =>
+                            refineChequeAndNarration(item, columnXMap["Account Description"], columnXMap["Cheque"])
+                        );
+                    }
+
                     if (banksToIncludeRefineDateAndNarration.includes(bankName) && columnXMap["Transaction Details"]) {
 
                         snappedTableData = snappedTableData.map(item =>
@@ -866,54 +891,6 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                         }
                     }
                 }
-                if (banksToIncludeParitalMergeHeaders.includes(bankName)) {
-                    for (const headerSet of headerVariants) {
-                        const trimmedText = decodedText.trim();
-
-                        // Split merged headers by whitespace
-                        const splitHeaders = trimmedText.split(/\s{2,}/).map(h => h.trim()).filter(Boolean);
-
-                        for (const header of splitHeaders) {
-                            if (headerSet.includes(header)) {
-                                if (headerY === null) {
-                                    headerY = item.y;
-                                }
-
-                                if (Math.abs(item.y - headerY) <= epsilon) {
-                                    detectedHeaders.add(header);
-
-                                    if (banksToIncludeHeadersInMultipleLines.includes(bankName)) {
-                                        if (!headerPositionsByPage[currentPage].hasOwnProperty(header)) {
-                                            headerPositionsByPage[currentPage][header] = item.x;
-                                        }
-                                    } else {
-                                        headerPositionsByPage[currentPage][header] = item.x;
-                                    }
-                                }
-                            }
-                        }
-
-                        // Check if all headers in the set are detected
-                        if (!headersFound && (detectedHeaders.size === headerSet.length && headerSet.every(h => detectedHeaders.has(h)))) {
-                            if (headerPositionsByPage[currentPage]['Balance']) {
-                                const debitX = headerPositionsByPage[currentPage]['Debit'];
-                                const estimatedGap = (headerPositionsByPage[currentPage]['Balance'] - debitX) / 3;
-                                const creditX = debitX + estimatedGap;
-                                headerPositionsByPage[currentPage]['Credit'] = creditX;
-                            }
-
-                            for (const header of headerSet) {
-                                alignments[header] = detectAlignmentFromText(header);
-                            }
-                            headersFound = true;
-                            isAfterTable = false;
-                            tableEndY = null;
-                            console.log(`Headers detected on Page ${currentPage} using format:`, headerSet);
-                            requiredHeaders = headerSet;
-                            break;
-                        }
-                    }
-                }
                 if (banksToIncludeHeadersInMultipleLines.includes(bankName)) {
                     epsilon = 0.5;
                 }
@@ -959,6 +936,55 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                         }
                     }
                 }
+                if (banksToIncludeParitalMergeHeaders.includes(bankName)) {
+                    for (const headerSet of headerVariants) {
+                        const trimmedText = decodedText.trim();
+
+                        // Split merged headers by whitespace
+                        const splitHeaders = trimmedText.split(/\s{2,}/).map(h => h.trim()).filter(Boolean);
+
+                        for (const header of splitHeaders) {
+                            if (headerSet.includes(header)) {
+                                if (headerY === null) {
+                                    headerY = item.y;
+                                }
+
+                                if (Math.abs(item.y - headerY) <= epsilon) {
+                                    detectedHeaders.add(header);
+
+                                    if (banksToIncludeHeadersInMultipleLines.includes(bankName)) {
+                                        if (!headerPositionsByPage[currentPage].hasOwnProperty(header)) {
+                                            headerPositionsByPage[currentPage][header] = item.x;
+                                        }
+                                    } else {
+                                        headerPositionsByPage[currentPage][header] = item.x;
+                                    }
+                                }
+                            }
+                        }
+
+                        // Check if all headers in the set are detected
+                        if (!headersFound && (detectedHeaders.size === headerSet.length && headerSet.every(h => detectedHeaders.has(h)))) {
+                            if (headerPositionsByPage[currentPage]['Balance']) {
+                                const debitX = headerPositionsByPage[currentPage]['Debit'];
+                                const estimatedGap = (headerPositionsByPage[currentPage]['Balance'] - debitX) / 3;
+                                const creditX = debitX + estimatedGap;
+                                headerPositionsByPage[currentPage]['Credit'] = creditX;
+                            }
+
+                            for (const header of headerSet) {
+                                alignments[header] = detectAlignmentFromText(header);
+                            }
+                            headersFound = true;
+                            isAfterTable = false;
+                            tableEndY = null;
+                            isParitalHeader = true;
+                            console.log(`Headers detected on Page ${currentPage} using format:`, headerSet);
+                            requiredHeaders = headerSet;
+                            break;
+                        }
+                    }
+                }
                 if (!isHorizontalLineDetected) {
                     isHorizontalLineDetected = isHorizontalLine(decodedText);
                 }
@@ -968,6 +994,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                 const isTableEnd = isAFuzzyLogic ? matchesEndMarkerUsingFuzzyLogic(bankName, decodedText) : matchesEndMarker(bankName, decodedText);
                 if (isTableEnd && tableEndY === null) {
                     tableEndY = item.y;
+                    tableEndYByPage[currentPage] = tableEndY;
                     isAfterTable = true; // Set the flag to ignore content after this point
                     console.log(`Page ${currentPage}: Table End Y = ${tableEndY}`);
                 }
@@ -1158,19 +1185,18 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
             const rawDebit = row[lowerMap['debit']] || row[lowerMap['debits']] || row[lowerMap['withdrawal']] || row[lowerMap['withdrawals']] || row[lowerMap['withdra']] || (row[lowerMap['amount(rs.)']]?.includes('Dr') ? row[lowerMap['amount(rs.)']] : '');
             const rawCredit = row[lowerMap['credit']] || row[lowerMap['credits']] || row[lowerMap['deposit']] || row[lowerMap['deposits']] || (row[lowerMap['amount(rs.)']]?.includes('Cr') ? row[lowerMap['amount(rs.)']] : '');
 
-            const debit = rawDebit ? cleanAmount(rawDebit) : '0.00';
-            const credit = rawCredit ? cleanAmount(rawCredit) : '0.00';
-
+            const debit = cleanAmount(rawDebit);
+            const credit = cleanAmount(rawCredit);
             // Mutual exclusion rule
             const finalDebit = debit !== '0.00' ? debit : '0.00';
-            const finalCredit = debit !== '0.00' ? '0.00' : credit;
+            const finalCredit = credit !== '0.00' ? credit : '0.00';
 
             const balanceRaw = row[lowerMap['balance']] || row[lowerMap['balance(rs.)']] || row[lowerMap['balancer']] || row[lowerMap['available bal.']] || '';
             const balance = balanceRaw ? cleanAmount(balanceRaw) : '0.00';
 
             // let reference = row[lowerMap['transaction id']] || row[lowerMap['ref no./cheque']] || row[lowerMap['ref/cheque']] || row[lowerMap['cheque no']] || row[lowerMap['cheque no.']] || row[lowerMap['cheque']] || row[lowerMap['chq no']] || row[lowerMap['chq./ref.no.']] || row[lowerMap['chq-no']] || row[lowerMap['id']] || '';
 
-            const description = row[lowerMap['remarks']] || row[lowerMap['description']] || row[lowerMap['narration']] || row[lowerMap['particulars']] || row[lowerMap['transaction details']] || row[lowerMap['details']] || '';
+            const description = row[lowerMap['remarks']] || row[lowerMap['description']] || row[lowerMap['narration']] || row[lowerMap['particulars']] || row[lowerMap['transaction details']] || row[lowerMap['details']] || row[lowerMap['account description']] || '';
 
             const finalAmount = finalDebit !== '0.00' ? finalDebit : finalCredit;
             const fingerprint = `${formattedDate}|${description.trim()}|${finalAmount}`;
@@ -1249,9 +1275,8 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
 
 
         function cleanAmount(value = '') {
-            return value
-                .replace(/₹|INR|\(|\)|Cr|CR|Dr|DR|-|,/gi, '')
-                .trim();
+            const cleaned = value.replace(/₹|INR|\(|\)|Cr|CR|Dr|DR|-|,/gi, '').trim();
+            return cleaned && !isNaN(cleaned) ? cleaned : '0.00';
         }
 
         function isHorizontalLine(text) {
@@ -2224,6 +2249,20 @@ const groupItemsByY = (items, epsilon) => {
     return groupedByY;
 };
 
+const filterGroupedByY = (groupedByY, thresholdY) => {
+    const filtered = {};
+
+    Object.entries(groupedByY).forEach(([key, group]) => {
+        const yValue = parseFloat(key);
+        if (yValue < thresholdY) {
+            filtered[key] = group;
+        }
+    });
+
+    return filtered;
+};
+
+
 const cleanGroupedByYAxis = (groupedByYAxis) => {
     const cleaned = {};
 
@@ -2673,6 +2712,25 @@ const refineRefNoAndNarration = (
     }
     return item;
 };
+
+const refineChequeAndNarration = (
+    item,
+    narrationX,
+    chequeX
+) => {
+    const isValidChequeNo = text => {
+        const cleaned = text.trim();
+        return /^\d{6}$/.test(cleaned); // 6-digit numeric cheque number
+    };
+
+    if (item.x === chequeX && !isValidChequeNo(item.text)) {
+        // Mis-snapped narration at cheque position
+        return { ...item, x: narrationX };
+    }
+
+    return item;
+};
+
 
 const refineTransactionIdAndRemarks = (item, narrationX, refNoX) => {
     const isValidRefNo = text => {
