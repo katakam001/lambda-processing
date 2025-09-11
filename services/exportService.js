@@ -8,8 +8,8 @@ async function exportDaybookToPDF({ fileData, metadata, awsRequestId, bucketName
     const rawJson = await streamToString(fileData.Body);
     const jsonContent = JSON.parse(rawJson);
 
-    const fileName = `daybook_${metadata.financialyear}_${awsRequestId}.pdf`;
-    const outputPath = await generatePDFToFile(jsonContent, fileName);
+    const fileName = `${metadata.filetype}_${metadata.financialyear}_${awsRequestId}.pdf`;
+    const outputPath = await generatePDFToFile(jsonContent, metadata.filetype,fileName);
     const pdfStream = fs.createReadStream(outputPath);
 
     const s3Key = `pdf-outputs/${metadata.userid}/${fileName}`;

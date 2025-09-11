@@ -6,7 +6,9 @@ const PdfPrinter = require("pdfmake");
 const fonts = {
   Roboto: {
     normal: path.join(__dirname, "..", "fonts", "Roboto-Regular.ttf"),
-    bold: path.join(__dirname, "..", "fonts", "Roboto-Bold.ttf")
+    bold: path.join(__dirname, "..", "fonts", "Roboto-Bold.ttf"),
+    italics: path.join(__dirname, "..", "fonts", "Roboto-Italic.ttf"),
+    bolditalics: path.join(__dirname, "..", "fonts", "Roboto-BoldItalic.ttf")
   }
 };
 
@@ -113,9 +115,246 @@ function buildDocDefinition(data) {
   };
 }
 
+function buildAccountCopyDocDefinition(data) {
+  const content = [];
+
+  // 🏢 Company Header (first)
+  content.push(
+    { text: `${data.companyName}, ${data.cityName}`, style: "companyHeader" },
+    { text: "", margin: [0, 4] },
+    { text: data.reportTitle || "Account Copy", style: "reportTitle" }
+  );
+
+  // 🧾 Account Info Block (after company header)
+  const formattedStart = formatDate(data.startDate);
+  const formattedEnd = formatDate(data.endDate);
+
+  content.push(
+    { text: `Account Name: ${data.accountName}`, style: "infoHeader" },
+    { text: `Date Range: ${formattedStart} - ${formattedEnd}`, style: "infoHeader" },
+    { text: "", margin: [0, 4] }
+  );
+
+  // 📄 Table Header
+  const body = [
+    [
+      { text: "Date", style: "tableHeader" },
+      { text: "Narration", style: "tableHeader" },
+      { text: "Credit", style: "tableHeader" },
+      { text: "Debit", style: "tableHeader" },
+      { text: "Balance", style: "tableHeader" }
+    ]
+  ];
+
+  // 📌 Ledger Rows
+  data.fullLedger.forEach(entry => {
+    const isCredit = entry.type === true;
+    const credit = isCredit ? entry.amount : "";
+    const debit = !isCredit ? entry.amount : "";
+
+    if (entry.row_type === "summary") {
+      body.push([
+        { text: entry.date, alignment: "center", bold: true },
+        { text: entry.narration, bold: true },
+        { text: entry.overall_credit, alignment: "right", bold: true },
+        { text: entry.overall_debit, alignment: "right", bold: true },
+        { text: entry.balance, alignment: "right", bold: true }
+      ]);
+    } else if (entry.row_type === "opening") {
+      body.push([
+        { text: entry.date, alignment: "center", italics: true },
+        { text: entry.narration, italics: true },
+        { text: credit, alignment: "right", italics: true },
+        { text: debit, alignment: "right", italics: true },
+        { text: entry.balance, alignment: "right", italics: true }
+      ]);
+    } else {
+      body.push([
+        { text: entry.date, alignment: "center" },
+        { text: entry.narration },
+        { text: credit, alignment: "right" },
+        { text: debit, alignment: "right" },
+        { text: entry.balance, alignment: "right" }
+      ]);
+    }
+  });
+
+  // 🧾 Table Layout
+  content.push({
+    table: {
+      headerRows: 1,
+      widths: [70, '*', 70, 70, 70],
+      body
+    },
+    layout: {
+      hLineWidth: () => 0.5,
+      vLineWidth: () => 0.5,
+      paddingLeft: () => 2,
+      paddingRight: () => 2,
+      paddingTop: () => 1,
+      paddingBottom: () => 1
+    },
+    margin: [0, 5, 0, 10]
+  });
+
+  return {
+    pageSize: "A4",
+    pageMargins: [20, 30, 20, 30],
+    content,
+    styles: {
+      infoHeader: { fontSize: 10, alignment: "center", margin: [0, 2] },
+      companyHeader: { fontSize: 14, bold: true, alignment: "center" },
+      reportTitle: { fontSize: 12, bold: true, alignment: "center", margin: [0, 0, 0, 10] },
+      tableHeader: { fillColor: "#f2f2f2", bold: true, alignment: "center", fontSize: 8 }
+    },
+    header: function (currentPage, pageCount) {
+      return {
+        text: `Page ${currentPage} of ${pageCount}`,
+        alignment: "right",
+        fontSize: 8,
+        margin: [0, 10, 20, 0]
+      };
+    },
+    watermark: {
+      text: "TAXSERVICE4U",
+      color: "gray",
+      opacity: 0.1,
+      bold: true,
+      italics: false
+    }
+  };
+}
+
+function buildLedgerDocDefinition(data) {
+  const content = [];
+
+  // 🏢 Global Header
+  content.push(
+    { text: `${data.companyName}, ${data.cityName}`, style: "companyHeader" },
+    { text: "", margin: [0, 4] },
+    { text: data.reportTitle || "Ledger", style: "reportTitle" },
+    { text: "", margin: [0, 6] }
+  );
+
+  // 📄 Loop through each account
+  data.filteredEntries.forEach(account => {
+    content.push({ text: `Account Name: ${account.accountName}`, style: "accountHeader" });
+	  content.push({ text: `Date Range: ${formatDate(data.startDate)} - ${formatDate(data.endDate)}`, style: "infoHeader" });
+
+
+    const body = [
+      [
+        { text: "Date", style: "tableHeader" },
+        { text: "Narration", style: "tableHeader" },
+        { text: "Credit", style: "tableHeader" },
+        { text: "Debit", style: "tableHeader" },
+        { text: "Balance", style: "tableHeader" }
+      ]
+    ];
+
+    account.entries.forEach(entry => {
+      const isCredit = entry.type === true;
+      const credit = isCredit ? entry.amount : "";
+      const debit = !isCredit ? entry.amount : "";
+
+      if (entry.row_type === "summary") {
+        body.push([
+          { text: entry.date, alignment: "center", bold: true },
+          { text: entry.narration, bold: true },
+          { text: entry.overall_credit, alignment: "right", bold: true },
+          { text: entry.overall_debit, alignment: "right", bold: true },
+          { text: entry.balance, alignment: "right", bold: true }
+        ]);
+      } else if (entry.row_type === "opening") {
+        body.push([
+          { text: entry.date, alignment: "center", italics: true },
+          { text: entry.narration, italics: true },
+          { text: credit, alignment: "right", italics: true },
+          { text: debit, alignment: "right", italics: true },
+          { text: entry.balance, alignment: "right", italics: true }
+        ]);
+      } else {
+        body.push([
+          { text: entry.date, alignment: "center" },
+          { text: entry.narration },
+          { text: credit, alignment: "right" },
+          { text: debit, alignment: "right" },
+          { text: entry.balance, alignment: "right" }
+        ]);
+      }
+    });
+
+    content.push({
+      table: {
+        headerRows: 1,
+        widths: [70, '*', 70, 70, 70],
+        body
+      },
+      layout: {
+        hLineWidth: () => 0.5,
+        vLineWidth: () => 0.5,
+        paddingLeft: () => 2,
+        paddingRight: () => 2,
+        paddingTop: () => 1,
+        paddingBottom: () => 1
+      },
+      margin: [0, 5, 0, 10]
+    });
+  });
+
+  return {
+    pageSize: "A4",
+    pageMargins: [20, 30, 20, 30],
+    content,
+    styles: {
+      companyHeader: { fontSize: 14, bold: true, alignment: "center" },
+      reportTitle: { fontSize: 12, bold: true, alignment: "center", margin: [0, 0, 0, 10] },
+      infoHeader: { fontSize: 10, alignment: "center", margin: [0, 2] },
+      accountHeader: { fontSize: 11, bold: true,alignment: "center", margin: [0, 10, 0, 4] },
+      tableHeader: { fillColor: "#f2f2f2", bold: true, alignment: "center", fontSize: 8 }
+    },
+    header: function (currentPage, pageCount) {
+      return {
+        text: `Page ${currentPage} of ${pageCount}`,
+        alignment: "right",
+        fontSize: 8,
+        margin: [0, 10, 20, 0]
+      };
+    },
+    watermark: {
+      text: "TAXSERVICE4U",
+      color: "gray",
+      opacity: 0.1,
+      bold: true,
+      italics: false
+    }
+  };
+}
+
+// 📅 Date formatter
+function formatDate(date) {
+  const d = new Date(date);
+  return d.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  });
+}
+
 // Generate PDF and write to /tmp
-async function generatePDFToFile(data, fileName = "daybook.pdf") {
-  const docDefinition = buildDocDefinition(data);
+async function generatePDFToFile(data, fileType, fileName) {
+  let docDefinition;
+
+  if (fileType === "accountCopy") {
+    docDefinition = buildAccountCopyDocDefinition(data);
+  } else if (fileType === "daybook") {
+    docDefinition = buildDocDefinition(data);
+  } else if (fileType === "ledger") {
+    docDefinition = buildLedgerDocDefinition(data);
+  } else {
+    throw new Error(`Unsupported file type: ${fileType}`);
+  }
+
   const pdfDoc = printer.createPdfKitDocument(docDefinition);
   const outputPath = path.join("/tmp", fileName);
 

@@ -4,3 +4,7 @@ aws lambda create-function --function-name processLargeFileLambda --runtime node
 aws lambda create-function --function-name processSmallJSONFileLambda --runtime nodejs20.x --role arn:aws:iam::867344430886:role/LambdaS3ExecutionRole --layers arn:aws:lambda:ap-south-2:867344430886:layer:GhostscriptLayer:2 --handler index.handler --zip-file fileb://lambda-code.zip --memory-size 128 --timeout 120 --region ap-south-2
 aws lambda create-function --function-name processMediumJSONFileLambda --runtime nodejs20.x --role arn:aws:iam::867344430886:role/LambdaS3ExecutionRole --layers arn:aws:lambda:ap-south-2:867344430886:layer:GhostscriptLayer:2 --handler index.handler --zip-file fileb://lambda-code.zip --memory-size 256 --timeout 120 --region ap-south-2
 aws lambda create-function --function-name processLargeJSONFileLambda --runtime nodejs20.x --role arn:aws:iam::867344430886:role/LambdaS3ExecutionRole --layers arn:aws:lambda:ap-south-2:867344430886:layer:GhostscriptLayer:2 --handler index.handler --zip-file fileb://lambda-code.zip --memory-size 400 --timeout 120 --region ap-south-2
+
+aws lambda update-function-code --function-name processSmallJSONFileLambda --zip-file fileb://lambda-code.zip
+aws lambda update-function-code --function-name processMediumJSONFileLambda --zip-file fileb://lambda-code.zip
+aws lambda update-function-code --function-name processLargeJSONFileLambda --zip-file fileb://lambda-code.zip
