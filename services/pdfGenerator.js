@@ -239,7 +239,7 @@ function buildLedgerDocDefinition(data) {
   // 📄 Loop through each account
   data.filteredEntries.forEach(account => {
     content.push({ text: `Account Name: ${account.accountName}`, style: "accountHeader" });
-	  content.push({ text: `Date Range: ${formatDate(data.startDate)} - ${formatDate(data.endDate)}`, style: "infoHeader" });
+    content.push({ text: `Date Range: ${formatDate(data.startDate)} - ${formatDate(data.endDate)}`, style: "infoHeader" });
 
 
     const body = [
@@ -310,8 +310,232 @@ function buildLedgerDocDefinition(data) {
       companyHeader: { fontSize: 14, bold: true, alignment: "center" },
       reportTitle: { fontSize: 12, bold: true, alignment: "center", margin: [0, 0, 0, 10] },
       infoHeader: { fontSize: 10, alignment: "center", margin: [0, 2] },
-      accountHeader: { fontSize: 11, bold: true,alignment: "center", margin: [0, 10, 0, 4] },
+      accountHeader: { fontSize: 11, bold: true, alignment: "center", margin: [0, 10, 0, 4] },
       tableHeader: { fillColor: "#f2f2f2", bold: true, alignment: "center", fontSize: 8 }
+    },
+    header: function (currentPage, pageCount) {
+      return {
+        text: `Page ${currentPage} of ${pageCount}`,
+        alignment: "right",
+        fontSize: 8,
+        margin: [0, 10, 20, 0]
+      };
+    },
+    watermark: {
+      text: "TAXSERVICE4U",
+      color: "gray",
+      opacity: 0.1,
+      bold: true,
+      italics: false
+    }
+  };
+}
+
+function buildTrialBalanceDocDefinition(data) {
+  const content = [];
+
+  // 🏢 Header
+  content.push(
+    { text: `${data.companyName}, ${data.cityName}`, style: "companyHeader" },
+    { text: "", margin: [0, 4] },
+    { text: data.reportTitle || "Trial Balance", style: "reportTitle" },
+    { text: `As on ${formatDate(data.reportDate)}`, style: "infoHeader" },
+    { text: "", margin: [0, 6] }
+  );
+
+  const highVolumeGroups = ["Sundry Creditors", "Sundry Debtors", "Sundry FARMERS"];
+  const unifiedBody = [
+    [
+      { text: "Account Name", style: "tableHeader" },
+      { text: "Debit Amount", style: "tableHeader" },
+      { text: "Credit Amount", style: "tableHeader" }
+    ]
+  ];
+
+  const highVolumeSummaries = [];
+
+  // 📊 Unified Table: Regular + High-Volume Summary
+  data.groupedAccounts.forEach(group => {
+    const isHighVolume = highVolumeGroups.includes(group.groupName);
+    const groupDebitTotal = group.accounts.reduce((sum, acc) => sum + (acc.debit || 0), 0);
+    const groupCreditTotal = group.accounts.reduce((sum, acc) => sum + (acc.credit || 0), 0);
+
+    if (isHighVolume) {
+      highVolumeSummaries.push({
+        groupName: group.groupName,
+        debitTotal: groupDebitTotal,
+        creditTotal: groupCreditTotal,
+        accounts: group.accounts
+      });
+    } else {
+      // Group Name
+      unifiedBody.push([
+        { text: group.groupName, bold: true, decoration: "underline" },
+        { text: "", alignment: "right" },
+        { text: "", alignment: "right" }
+      ]);
+
+      group.accounts.forEach(account => {
+        unifiedBody.push([
+          { text: account.accountName, margin: [10, 0, 0, 0] },
+          {
+            text: account.debit
+              ? account.debit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+              : "",
+            alignment: "right"
+          },
+          {
+            text: account.credit
+              ? account.credit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+              : "",
+            alignment: "right"
+          }
+        ]);
+      });
+
+      // Group Total
+
+      unifiedBody.push([
+        { text: "Group Total", bold: true, margin: [10, 0, 0, 0] },
+        {
+          text: groupDebitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+          alignment: "right",
+          bold: true
+        },
+        {
+          text: groupCreditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+          alignment: "right",
+          bold: true
+        }
+      ]);
+    }
+  });
+
+  // 📋 High-Volume Summary Section
+  if (highVolumeSummaries.length > 0) {
+
+    highVolumeSummaries.forEach(summary => {
+
+      unifiedBody.push([
+        { text: summary.groupName },
+        {
+          text: summary.debitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+          alignment: "right",
+          bold: true
+        },
+        {
+          text: summary.creditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+          alignment: "right",
+          bold: true
+        }
+      ]);
+    });
+  }
+
+  // ✅ Grand Total
+  unifiedBody.push([
+    { text: "Total", bold: true },
+    {
+      text: data.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      alignment: "right",
+      bold: true
+    },
+    {
+      text: data.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      alignment: "right",
+      bold: true
+    }
+  ]);
+
+  // 📋 Unified Table Output
+  content.push({
+    table: {
+      headerRows: 1,
+      widths: ['*', 100, 100],
+      body: unifiedBody
+    },
+    layout: {
+      hLineWidth: () => 0.5,
+      vLineWidth: () => 0.5,
+      paddingLeft: () => 2,
+      paddingRight: () => 2,
+      paddingTop: () => 1,
+      paddingBottom: () => 1
+    },
+    margin: [0, 0, 0, 10]
+  });
+
+  // 📊 Full Tables for High-Volume Groups
+  highVolumeSummaries.forEach(summary => {
+    const body = [
+      [
+        { text: "Account Name", style: "tableHeader" },
+        { text: "Debit Amount", style: "tableHeader" },
+        { text: "Credit Amount", style: "tableHeader" }
+      ]
+    ];
+
+    summary.accounts.forEach(account => {
+      body.push([
+        { text: account.accountName },
+        {
+          text: account.debit
+            ? account.debit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            : "",
+          alignment: "right"
+        },
+        {
+          text: account.credit
+            ? account.credit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            : "",
+          alignment: "right"
+        }
+      ]);
+    });
+
+    body.push([
+      { text: "Total", bold: true },
+      {
+        text: summary.debitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        alignment: "right",
+        bold: true
+      },
+      {
+        text: summary.creditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        alignment: "right",
+        bold: true
+      }
+    ]);
+    content.push({ text: summary.groupName, style: "groupHeader", decoration: "underline", margin: [0, 10, 0, 4] });
+
+    content.push({
+      table: {
+        headerRows: 1,
+        widths: ['*', 100, 100],
+        body
+      },
+      layout: {
+        hLineWidth: () => 0.5,
+        vLineWidth: () => 0.5,
+        paddingLeft: () => 2,
+        paddingRight: () => 2,
+        paddingTop: () => 1,
+        paddingBottom: () => 1
+      },
+      margin: [0, 0, 0, 10]
+    });
+  });
+
+  return {
+    pageSize: "A4",
+    pageMargins: [20, 30, 20, 30],
+    content,
+    styles: {
+      companyHeader: { fontSize: 14, bold: true, alignment: "center" },
+      reportTitle: { fontSize: 12, bold: true, alignment: "center", margin: [0, 0, 0, 10] },
+      infoHeader: { fontSize: 10, alignment: "center", margin: [0, 2] },
+      groupHeader: { fontSize: 13, bold: true },
+      tableHeader: { fillColor: "#f2f2f2", bold: true, alignment: "center", fontSize: 9 }
     },
     header: function (currentPage, pageCount) {
       return {
@@ -351,6 +575,8 @@ async function generatePDFToFile(data, fileType, fileName) {
     docDefinition = buildDocDefinition(data);
   } else if (fileType === "ledger") {
     docDefinition = buildLedgerDocDefinition(data);
+  } else if (fileType === "trailBalance") {
+    docDefinition = buildTrialBalanceDocDefinition(data);
   } else {
     throw new Error(`Unsupported file type: ${fileType}`);
   }

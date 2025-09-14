@@ -39,7 +39,10 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                     'Debit', 'Credit', 'Balance']
             ],
             'INDIAN BANK': [
-                ["Date", "Transaction Details", "Debits", "Credits", "Balance"]
+                ["Date", "Transaction Details", "Debits", "Credits", "Balance"],
+                ["Post Date", "Date", "Details", "Chq.No.", "Debit", "Credit", "Balance"],
+                ["Post", "Date", "Details", "Chq.No.", "Debit", "Credit", "Balance"],
+                ["Post Date", "Value Date", "Details", "Chq.No.", "Debit", "Credit", "Balance"],
             ],
             'HDFC BANK': [
                 ["Date", "Narration", "Chq./Ref.No.", "Value", "Withdrawal", "Deposit", "Balance"]
@@ -91,7 +94,10 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                 "CLOSING BALANCE"
             ],
             'INDIAN BANK': [
-                'Ending Balance'
+                'Ending Balance',
+                'Carried Forward',
+                'CLOSING BALANCE :',
+                'CLOSING BALANCE:'
             ],
             'HDFC BANK': [
                 'STATEMENTSUMMARY',
@@ -130,9 +136,11 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
         };
 
         const banksToExcludeCarryForward = ['UNION BANK OF INDIA', 'CANARA BANK', 'SBI', 'CITY UNION BANK', 'AXIS BANK']; // add banks as needed
+        const banksToIncludeHeadernWithBroughtForwardToExcludeCarryForward = ['INDIAN BANK']; // add banks as needed --> validated
         const banksToIncludeRefineRefNoAndNarration = ['HDFC BANK']; // add banks as needed
         const banksToIncludeRefineTransactionIdAndNarration = ['UNION BANK OF INDIA']; // add banks as needed
         const banksToIncludeRefineDateAndNarration = ['CITY UNION BANK', 'IDFC FIRST BANK']; // add banks as needed --> validated
+        const banksToIncludeRefineDateAndDetails = ['INDIAN BANK']; // add banks as needed --> validated
         const banksToIncludeOrderChangeOfBalance = ['CITY UNION BANK']; // add banks as needed
         const banksToIncludeYAxisInJsonConversion = ['CITY UNION BANK']; // add banks as needed
         const banksToIncludeYAxisInJsonConversionGeneric = ['IDFC FIRST BANK']; // add banks as needed
@@ -151,6 +159,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
         const banksToIncludeHeadersInMultipleLines = ['ICICI BANK']; // add banks as needed
         const banksToIncludeHeadernWithEpsilionVaration = ['IDFC FIRST BANK']; // add banks as needed --> validated
         const banksToIncludeHeadernWithEpsilionVarationWithLatestFormat = ['SBI']; // add banks as needed --> validated
+        const banksToIncludeHeadernWithEpsilionVarationWithTwoTypesOfHeaders = ['INDIAN BANK']; // add banks as needed --> validated
         const banksToFilterUnnecessaryDataWithtableEndY = ['SBI']; // add banks as needed --> validated
         const banksToIncludeHeadersAlign = ['BANK OF INDIA', 'HDFC BANK']; // add banks as needed
         const banksToIncludeChangeHeadersAlign = ['HDFC BANK']; // add banks as needed
@@ -689,6 +698,14 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                             refineDateAndParticulars(item, columnXMap["Particulars"], columnXMap["Date"])
                         );
                     }
+                    if (banksToIncludeRefineDateAndDetails.includes(bankName) && columnXMap["Details"]) {
+                        const dateColumn = columnXMap["Date"] || columnXMap["Value Date"];
+                        if (dateColumn) {
+                            snappedTableData = snappedTableData.map(item =>
+                                refineValueDateAndParticulars(item, columnXMap["Details"], dateColumn)
+                            );
+                        }
+                    }
                     if (banksToIncludeRefineDateAndNarration.includes(bankName) && columnXMap["Particulars"]) {
 
                         snappedTableData = snappedTableData.map(item =>
@@ -699,69 +716,76 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
 
                     // console.log(mergedDates);
                     // 👉 use nextPage if it exists
+                    const hasBroughtForward = snappedTableData.some(
+                        item => item.text.toLowerCase().includes("brought forward")
+                    );
                     if (nextPage && !banksToExcludeCarryForward.includes(bankName)) {
-                        const nextColumnXMap = headerPositionsByPage[nextPage]; // Your existing header position map
-                        // console.log(tableDataByPage[nextPage]);
+                        if (!(hasBroughtForward && banksToIncludeHeadernWithBroughtForwardToExcludeCarryForward.includes(bankName))) {
 
-                        let nextSnappedTableData = tableDataByPage[nextPage].map(item =>
-                            snapToColumn(item, nextColumnXMap)
-                        );
+                            const nextColumnXMap = headerPositionsByPage[nextPage]; // Your existing header position map
+                            // console.log(tableDataByPage[nextPage]);
 
-                        if (banksToIncludeRefineDateAndNarration.includes(bankName)) {
-
-                            nextSnappedTableData = nextSnappedTableData.map(item =>
-                                refineValueDateAndParticulars(item, columnXMap["Transaction Details"], columnXMap["Value Date"])
+                            let nextSnappedTableData = tableDataByPage[nextPage].map(item =>
+                                snapToColumn(item, nextColumnXMap)
                             );
-                        }
 
-                        // console.log(nextSnappedTableData);
-                        let nextMergedDates = combineDateFragments(nextSnappedTableData);
-                        // console.log(nextMergedDates);
+                            if (banksToIncludeRefineDateAndNarration.includes(bankName)) {
 
-                        if (banksToIncludeMergeTransactionDetails.includes(bankName)) {
-                            nextMergedDates = nextMergedDates.map(item =>
-                                refineYAxisOfParticularsWithDate(item, columnXMap["Trans Date and"], columnXMap["Transaction Details"], nextMergedDates, 0.9)
-                            );
-                        }
+                                nextSnappedTableData = nextSnappedTableData.map(item =>
+                                    refineValueDateAndParticulars(item, columnXMap["Transaction Details"], columnXMap["Value Date"])
+                                );
+                            }
+
+                            // console.log(nextSnappedTableData);
+                            let nextMergedDates = combineDateFragments(nextSnappedTableData);
+                            // console.log(nextMergedDates);
+
+                            if (banksToIncludeMergeTransactionDetails.includes(bankName)) {
+                                nextMergedDates = nextMergedDates.map(item =>
+                                    refineYAxisOfParticularsWithDate(item, columnXMap["Trans Date and"], columnXMap["Transaction Details"], nextMergedDates, 0.9)
+                                );
+                            }
 
                         let carryForwardRows = getCarryForwardFragments(columnXMap, nextMergedDates);
 
-                        if (banksToIncludeRefineRefNoAndNarration.includes(bankName)) {
+                            if (banksToIncludeRefineRefNoAndNarration.includes(bankName)) {
 
-                            carryForwardRows = carryForwardRows.map(item =>
-                                refineRefNoAndNarration(item, nextColumnXMap["Narration"], nextColumnXMap["Chq./Ref.No."])
-                            );
-                            const currentPagenarration = mergedDates.filter(item =>
-                                Math.abs(item.x - columnXMap["Narration"]) < epsilon
-                            );
-                            const lastNarrationY = currentPagenarration.length
-                                ? currentPagenarration[currentPagenarration.length - 1].y
-                                : null;
-                            if (lastNarrationY !== null) {
-                                carryForwardRows = carryForwardRows.map(row => ({
-                                    ...row,
-                                    y: lastNarrationY
-                                }));
+                                carryForwardRows = carryForwardRows.map(item =>
+                                    refineRefNoAndNarration(item, nextColumnXMap["Narration"], nextColumnXMap["Chq./Ref.No."])
+                                );
+                                const currentPagenarration = mergedDates.filter(item =>
+                                    Math.abs(item.x - columnXMap["Narration"]) < epsilon
+                                );
+                                const lastNarrationY = currentPagenarration.length
+                                    ? currentPagenarration[currentPagenarration.length - 1].y
+                                    : null;
+                                if (lastNarrationY !== null) {
+                                    carryForwardRows = carryForwardRows.map(row => ({
+                                        ...row,
+                                        y: lastNarrationY
+                                    }));
+                                }
                             }
+
+                            if (banksToIncludeCarryForwardLogicToreplaceYAxis.includes(bankName)) {
+                                const currentPagenarration = mergedDates.filter(item =>
+                                    Math.abs(item.x - columnXMap["Transaction Details"]) < epsilon
+                                );
+                                const lastNarrationY = currentPagenarration.length
+                                    ? currentPagenarration[currentPagenarration.length - 1].y
+                                    : null;
+                                if (lastNarrationY !== null) {
+                                    carryForwardRows = carryForwardRows.map(row => ({
+                                        ...row,
+                                        y: lastNarrationY
+                                    }));
+                                }
+                            }
+
+                            console.log(carryForwardRows);
+                            mergedDates.push(...carryForwardRows);
                         }
 
-                        if (banksToIncludeCarryForwardLogicToreplaceYAxis.includes(bankName)) {
-                            const currentPagenarration = mergedDates.filter(item =>
-                                Math.abs(item.x - columnXMap["Transaction Details"]) < epsilon
-                            );
-                            const lastNarrationY = currentPagenarration.length
-                                ? currentPagenarration[currentPagenarration.length - 1].y
-                                : null;
-                            if (lastNarrationY !== null) {
-                                carryForwardRows = carryForwardRows.map(row => ({
-                                    ...row,
-                                    y: lastNarrationY
-                                }));
-                            }
-                        }
-
-                        console.log(carryForwardRows);
-                        mergedDates.push(...carryForwardRows);
                     }
                     // console.log(mergedDates);
 
@@ -899,6 +923,9 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                 }
                 if (banksToIncludeHeadernWithEpsilionVarationWithLatestFormat.includes(bankName)) {
                     epsilon = 0.365;
+                }
+                if (banksToIncludeHeadernWithEpsilionVarationWithTwoTypesOfHeaders.includes(bankName)) {
+                    epsilon = 0.675;
                 }
 
                 for (const headerSet of headerVariants) {

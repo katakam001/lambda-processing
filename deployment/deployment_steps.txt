@@ -8,3 +8,13 @@ aws lambda create-function --function-name processLargeJSONFileLambda --runtime 
 aws lambda update-function-code --function-name processSmallJSONFileLambda --zip-file fileb://lambda-code.zip
 aws lambda update-function-code --function-name processMediumJSONFileLambda --zip-file fileb://lambda-code.zip
 aws lambda update-function-code --function-name processLargeJSONFileLambda --zip-file fileb://lambda-code.zip
+aws lambda update-function-code --function-name processSmallFileLambda --zip-file fileb://lambda-code.zip
+aws lambda update-function-code --function-name processMediumFileLambda --zip-file fileb://lambda-code.zip
+aws lambda update-function-code --function-name processLargeFileLambda --zip-file fileb://lambda-code.zip
+
+
+compress the existing zip file
+Compress-Archive -Update -Path utils,services,index.js,fonts -DestinationPath lambda-code.zip
+
+create a compress archieve using zip.
+Compress-Archive -Path utils,services,fonts,node_modules,index.js -DestinationPath lambda-code.zip
