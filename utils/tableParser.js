@@ -80,6 +80,10 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
             'BANK OF BARODA': [
                 ["DATE", "PARTICULARS", "CHQ.NO.", "WITHDRAWALS", "DEPOSITS", "BALANCE"]
             ],
+            'KARUR VYSYA BANK': [
+                ["Txn", "Value", "Brn", "Particulars", "Ref. No", "Debit", "Credit", "Balance"],
+                ["TXN DATE", "VALUE DATE", "DESCRIPTION", "DEBIT", "CREDIT", "BALANCE"]
+            ],
             // Add more banks dynamically
         };
 
@@ -151,11 +155,17 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
             ],
             'BANK OF BARODA': [
                 /^\s*Page Total:/
-            ]
+            ],
+            'KARUR VYSYA BANK': [
+                'Statements are sent to customers only where transac',
+                'Karur Vysya Bank does not ask for personal security',
+                'Total Amount Recovered till date (Principal , Interest, Charges)',
+                /^Page:\s*\d+$/
+            ],
             // Add more banks as needed
         };
 
-        const banksToExcludeCarryForward = ['UNION BANK OF INDIA', 'CANARA BANK', 'SBI', 'CITY UNION BANK', 'AXIS BANK', 'BANK OF BARODA']; // add banks as needed
+        const banksToExcludeCarryForward = ['UNION BANK OF INDIA', 'CANARA BANK', 'SBI', 'CITY UNION BANK', 'AXIS BANK', 'BANK OF BARODA', 'KARUR VYSYA BANK']; // add banks as needed
         const banksToIncludeHeadernWithBroughtForwardToExcludeCarryForward = ['INDIAN BANK']; // add banks as needed --> validated
         const banksToIncludeRefineRefNoAndNarration = ['HDFC BANK']; // add banks as needed
         const banksToIncludeRefineTransactionIdAndNarration = ['UNION BANK OF INDIA']; // add banks as needed
@@ -167,10 +177,12 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
         const banksToIncludeMergeNarrationLines = ['HDFC BANK']; // add banks as needed
         const banksToIncludeMergeTransactionDetails = ['IDFC FIRST BANK']; // add banks as needed --> validated
         const banksToIncludeCarryForwardLogicToreplaceYAxis = ['IDFC FIRST BANK']; // add banks as needed --> validated
-        const bankshasHeadersInOnePage = ['HDFC BANK', 'ICICI BANK', 'BANK OF INDIA', 'AXIS BANK', 'ANDHRA PRAGATHI GRAMEENA BANK']; // add banks as needed
-        const bankToIncludeValidateHeaderWithCustomParameter = ['HDFC BANK', 'BANK OF INDIA', 'AXIS BANK']; // add banks as needed
+        const bankshasHeadersInOnePage = ['HDFC BANK', 'ICICI BANK', 'BANK OF INDIA', 'AXIS BANK', 'ANDHRA PRAGATHI GRAMEENA BANK', 'KARUR VYSYA BANK']; // add banks as needed
+        const bankToIncludeValidateHeaderWithCustomParameter = ['HDFC BANK', 'BANK OF INDIA', 'AXIS BANK', 'KARUR VYSYA BANK']; // add banks as needed
+        const bankToIncludeValidateHeaderWithMonthName = ['KARUR VYSYA BANK']; // add banks as needed
         const banksToIncludeRefineCreditAndBalance = ['CENTRAL BANK OF INDIA']; // add banks as needed
         const banksToIncludeRefineChequeAndAccountDescription = ['CENTRAL BANK OF INDIA']; // add banks as needed
+        const banksToIncludeRefineBranchAndParticulars = ['KARUR VYSYA BANK']; // add banks as needed
         const bankToIncludeValidateHeaderWithTransactionId = ['ICICI BANK']; // add banks as needed
         const banksToIncludeMergeHeaders = ['CITY UNION BANK', 'ANDHRA PRAGATHI GRAMEENA BANK']; // add banks as needed
         const banksToIncludeMergeHeadersInOnePage = ['ANDHRA PRAGATHI GRAMEENA BANK']; // add banks as needed
@@ -181,8 +193,9 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
         const banksToIncludeHeadernWithEpsilionVarationWithLatestFormat = ['SBI']; // add banks as needed --> validated
         const banksToIncludeHeadernWithEpsilionVarationWithTwoTypesOfHeaders = ['INDIAN BANK']; // add banks as needed --> validated
         const banksToFilterUnnecessaryDataWithtableEndY = ['SBI']; // add banks as needed --> validated
-        const banksToIncludeHeadersAlign = ['BANK OF INDIA', 'HDFC BANK']; // add banks as needed
+        const banksToIncludeHeadersAlign = ['BANK OF INDIA', 'HDFC BANK', 'KARUR VYSYA BANK']; // add banks as needed
         const banksToIncludeChangeHeadersAlign = ['HDFC BANK']; // add banks as needed
+        const banksToIncludeChangeHeadersAlignWithAmounts = ['KARUR VYSYA BANK']; // add banks as needed
         const banksToIncludeHeadersAlignChangeXAxis = ['AXIS BANK']; // add banks as needed
         const banksToIncludeOrderChangeOfRemarks = ['BANK OF INDIA']; // add banks as needed
 
@@ -573,6 +586,12 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
 
                                 group.forEach(({ text }) => {
                                     const txt = text.trim();
+
+                                    if (bankToIncludeValidateHeaderWithMonthName.includes(bankName)) {
+                                        if (/^\d{1,2}[\/\-][A-Za-z]{3}[\/\-]\d{2,4}$/.test(txt)) {
+                                            dateCount++;
+                                        }
+                                    }
                                     if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/.test(txt)) dateCount++;
                                     else if (/^[₹]?[0-9,]+\.\d{2}$/.test(txt)) amountCount++;
                                     else if (/\w/.test(txt)) textCount++; // generic text validation
@@ -675,6 +694,15 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                         alignments["Balance"] = 'left';
                         width = 0.5
                     }
+                    if (banksToIncludeChangeHeadersAlignWithAmounts.includes(bankName)) {
+                        alignments["Debit"] = 'left';
+                        alignments["Credit"] = 'left';
+                        alignments["Balance"] = 'left';
+                        alignments["BALANCE"] = 'left';
+                        alignments["VALUE DATE"] = 'left';
+                        alignments["TXN DATE"] = 'left';
+                        width = 0.2
+                    }
 
                     if (banksToIncludeHeadersAlign.includes(bankName)) {
                         snappedTableData = tableDataByPage[page].map(item =>
@@ -709,6 +737,13 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
 
                         snappedTableData = snappedTableData.map(item =>
                             refineValueDateAndParticulars(item, columnXMap["Transaction Details"], columnXMap["Value Date"])
+                        );
+                    }
+
+                    if (banksToIncludeRefineBranchAndParticulars.includes(bankName) && columnXMap["Brn"]) {
+
+                        snappedTableData = snappedTableData.map(item =>
+                            refineBranchAndNarration(item, columnXMap["Particulars"], columnXMap["Brn"])
                         );
                     }
 
@@ -2937,6 +2972,24 @@ const refineChequeAndNarration = (
 
     if (item.x === chequeX && !isValidChequeNo(item.text)) {
         // Mis-snapped narration at cheque position
+        return { ...item, x: narrationX };
+    }
+
+    return item;
+};
+
+const refineBranchAndNarration = (
+    item,
+    narrationX,
+    branchX
+) => {
+    const isValidBranchCode = text => {
+        const cleaned = text.trim();
+        return /^\d{4}$/.test(cleaned); // 4-digit numeric branch code
+    };
+
+    if (item.x === branchX && !isValidBranchCode(item.text)) {
+        // Mis-snapped narration at branch position
         return { ...item, x: narrationX };
     }
 
