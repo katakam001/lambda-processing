@@ -15,6 +15,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
         let isAfterTable = false; // Flag to ignore rows after "Details of statement"
         let isAFuzzyLogic = false;
         let isParitalHeader = false;
+        let isFirstHeaderDetected = false;
         let isHorizontalLineDetected = false;
         let epsilon = 0.1; // Tolerance for y-position comparison
         const bankHeaders = {
@@ -35,7 +36,11 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                     'Debit', 'Credit', 'Balance'],
                 ['Txn Date', 'Value Date', 'Description', 'Ref/Cheque',
                     'Debit', 'Credit', 'Balance'],
+                ['Txn Date', 'Value Date', 'Description', 'Ref No./Cheque', 'Code',
+                    'Debit', 'Credit', 'Balance'],
                 ['Post Date', 'Value Date', 'Description', 'Cheque',
+                    'Debit', 'Credit', 'Balance'],
+                ['Date', 'Details', 'Ref No./Cheque',
                     'Debit', 'Credit', 'Balance']
             ],
             'INDIAN BANK': [
@@ -72,8 +77,19 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
             'ANDHRA PRAGATHI GRAMEENA BANK': [
                 ["Post Date", "Value Date", "Details", "Chq no", "Debit", "Credit", "Balance"]
             ],
+            'BANK OF BARODA': [
+                ["DATE", "PARTICULARS", "CHQ.NO.", "WITHDRAWALS", "DEPOSITS", "BALANCE"]
+            ],
             // Add more banks dynamically
         };
+
+        const headerYForBank = {
+            'SBI': [
+                'Txn Date', 'Post Date', 'Date'
+            ]
+        };
+
+        const sbifirstHeaders = ['Txn Date', 'Post Date'];//Except Date format
 
         // Bank-specific table end marker logic
         const bankEndMarkers = {
@@ -90,6 +106,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
             'SBI': [
                 'Please do not share your ATM, Debit/Credit card number, PIN (Personal Identification Number) and OTP (One Time Password)',
                 'Please do not share your ATM Debit/Credit card numbe',
+                '** This is computer generated statement and does not require a signature.',
                 "Page no.",
                 "CLOSING BALANCE"
             ],
@@ -131,11 +148,14 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
             ],
             'ANDHRA PRAGATHI GRAMEENA BANK': [
                 'Ope Bal'
+            ],
+            'BANK OF BARODA': [
+                /^\s*Page Total:/
             ]
             // Add more banks as needed
         };
 
-        const banksToExcludeCarryForward = ['UNION BANK OF INDIA', 'CANARA BANK', 'SBI', 'CITY UNION BANK', 'AXIS BANK']; // add banks as needed
+        const banksToExcludeCarryForward = ['UNION BANK OF INDIA', 'CANARA BANK', 'SBI', 'CITY UNION BANK', 'AXIS BANK', 'BANK OF BARODA']; // add banks as needed
         const banksToIncludeHeadernWithBroughtForwardToExcludeCarryForward = ['INDIAN BANK']; // add banks as needed --> validated
         const banksToIncludeRefineRefNoAndNarration = ['HDFC BANK']; // add banks as needed
         const banksToIncludeRefineTransactionIdAndNarration = ['UNION BANK OF INDIA']; // add banks as needed
@@ -154,7 +174,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
         const bankToIncludeValidateHeaderWithTransactionId = ['ICICI BANK']; // add banks as needed
         const banksToIncludeMergeHeaders = ['CITY UNION BANK', 'ANDHRA PRAGATHI GRAMEENA BANK']; // add banks as needed
         const banksToIncludeMergeHeadersInOnePage = ['ANDHRA PRAGATHI GRAMEENA BANK']; // add banks as needed
-        const banksToIncludeParitalMergeHeaders = ['CENTRAL BANK OF INDIA']; // add banks as needed
+        const banksToIncludeParitalMergeHeaders = ['CENTRAL BANK OF INDIA', 'BANK OF BARODA']; // add banks as needed
         const banksToIncludeHorizontalLine = ['BANK OF INDIA']; // add banks as needed
         const banksToIncludeHeadersInMultipleLines = ['ICICI BANK']; // add banks as needed
         const banksToIncludeHeadernWithEpsilionVaration = ['IDFC FIRST BANK']; // add banks as needed --> validated
@@ -183,10 +203,12 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                 if (banksToFilterUnnecessaryDataWithtableEndY.includes(bankName)) {
                     const pages = Object.entries(tableDataByPage);
                     pages.forEach(([page, items]) => {
-                        const groupByY = groupItemsByY(tableDataByPage[page], 0.01);
-                        const filteredGroups = filterGroupedByY(groupByY, tableEndYByPage[page]);
-                        const flattened = Object.values(filteredGroups).flat();
-                        tableDataByPage[page] = flattened;
+                        if (tableEndYByPage[page]) {
+                            const groupByY = groupItemsByY(tableDataByPage[page], 0.01);
+                            const filteredGroups = filterGroupedByY(groupByY, tableEndYByPage[page]);
+                            const flattened = Object.values(filteredGroups).flat();
+                            tableDataByPage[page] = flattened;
+                        }
                     });
                 }
 
@@ -408,7 +430,26 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
 
                 }
 
-                if (isParitalHeader && banksToIncludeParitalMergeHeaders.includes(bankName)) {
+                if (isHorizontalLineDetected && banksToIncludeParitalMergeHeaders.includes(bankName)) {
+
+                    const pages = Object.entries(tableDataByPage);
+                    const [firstPageKey, firstPageItems] = pages[0];
+                    const headerXMap = reestimateHeaderMap(headerPositionsByPage[firstPageKey], findAnchorHeaders(headerPositionsByPage[firstPageKey])); // baseX and charWidth can be tuned
+                    // console.log(headerXMap);
+                    // Apply this headerXMap across all pages
+                    pages.forEach(([page, items]) => {
+                        headerPositionsByPage[page] = { ...headerXMap };
+                        const filteredItems = items.filter(item => {
+                            const text = item.text?.trim();
+                            return text && !isHorizontalLine(text);
+                        });
+                        const groupByY = groupItemsByY(filteredItems, 0.01);
+                        let flattened = Object.values(parseStructuredRows(groupByY, headerPositionsByPage[page])).flat();
+                        tableDataByPage[page] = flattened
+                    });
+
+                }
+                if (!isHorizontalLineDetected && isParitalHeader && banksToIncludeParitalMergeHeaders.includes(bankName)) {
                     const pages = Object.entries(tableDataByPage);
                     const [firstPageKey, firstPageItems] = pages[0];
 
@@ -679,6 +720,20 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                         ].sort((a, b) => a.y - b.y); // optional: restore order
                     }
 
+                    if (banksToIncludeHeadernWithEpsilionVarationWithLatestFormat.includes(bankName) && columnXMap["Details"]) {
+
+                        snappedTableData = [
+                            ...snappedTableData.filter(item => Math.abs(item.x - columnXMap["Details"]) >= epsilon),
+                            ...snappedTableData.filter(item => Math.abs(item.x - columnXMap["Details"]) <= epsilon)
+                        ].sort((a, b) => {
+                            const yDiff = a.y - b.y;
+                            if (Math.abs(yDiff) > epsilon) {
+                                return yDiff; // sort by Y
+                            }
+                            return a.x - b.x; // if Y is close, sort by X
+                        });
+                    }
+
                     if (banksToIncludeRefineTransactionIdAndNarration.includes(bankName)) {
 
                         snappedTableData = snappedTableData.map(item =>
@@ -746,7 +801,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                                 );
                             }
 
-                        let carryForwardRows = getCarryForwardFragments(columnXMap, nextMergedDates);
+                            let carryForwardRows = getCarryForwardFragments(columnXMap, nextMergedDates);
 
                             if (banksToIncludeRefineRefNoAndNarration.includes(bankName)) {
 
@@ -862,6 +917,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                 headerY = null;
                 tableEndY = null;
                 isAfterTable = false; // Reset the flag for the new page
+                isFirstHeaderDetected = false;
                 detectedHeaders.clear(); // Clear detected headers
             } else if (item.text) {
                 let decodedText;
@@ -922,7 +978,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                     epsilon = 0.3;
                 }
                 if (banksToIncludeHeadernWithEpsilionVarationWithLatestFormat.includes(bankName)) {
-                    epsilon = 0.365;
+                    epsilon = 0.575;
                 }
                 if (banksToIncludeHeadernWithEpsilionVarationWithTwoTypesOfHeaders.includes(bankName)) {
                     epsilon = 0.675;
@@ -932,7 +988,15 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                     if (headerSet.includes(decodedText.trim())) {
                         // console.log(headerSet);
                         // console.log(decodedText.trim());
+                        if (banksToIncludeHeadernWithEpsilionVarationWithLatestFormat.includes(bankName) && !isFirstHeaderDetected && headerY && (headerYForBank[bankName].includes(decodedText.trim()))) {
+                            headerY = null;
+                            detectedHeaders.clear();
+                            headerPositionsByPage[currentPage] = {};
+                        }
                         if (headerY === null) {
+                            if (banksToIncludeHeadernWithEpsilionVarationWithLatestFormat.includes(bankName) && sbifirstHeaders.includes(decodedText.trim())) {
+                                isFirstHeaderDetected = true;
+                            }
                             headerY = item.y; // First header detected
                             // console.log(headerY);
                         }
@@ -1366,6 +1430,84 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
             return cleanParticularsField(allRows.filter((row) => isValidRow(row, headerXMap)), headerXMap);
 
         }
+
+        const parseStructuredRows = (groupByY, headerXMap, epsilon = 0.01) => {
+            const positionedItems = [];
+
+            const isDate = str => /^\d{2}-\d{2}-\d{2}$/.test(str.trim());
+            const isAmount = str => /^[\d,]+\.\d{2}$/.test(str.trim());
+            const isBalance = str => /^[\d,]+\.\d{2}(Cr|Dr)$/.test(str.trim());
+
+            const sortedYKeys = Object.keys(groupByY)
+                .sort((a, b) => parseFloat(a) - parseFloat(b));
+
+            for (const yStr of sortedYKeys) {
+                const items = groupByY[yStr];
+
+                if (!items || items.length === 0) continue;
+
+                // ✅ Skip entire row if any item contains "B/F"
+                const hasBF = items.some(item => /B\/F/i.test(item.text));
+                if (hasBF) continue;
+
+                const firstItem = items[0];
+                const secondItem = items[1];
+                const tokens = firstItem.text.trim().split(/\s+/);
+                const hasDate = tokens.some(isDate);
+
+                if (hasDate) {
+                    let i = 0;
+                    if (isDate(tokens[i])) {
+                        positionedItems.push({ text: tokens[i], x: headerXMap['DATE'], y: yStr });
+                        i++;
+                    }
+                    if (tokens[i]) {
+                        positionedItems.push({ text: tokens[i], x: headerXMap['PARTICULARS'], y: yStr });
+                        i++;
+                    }
+
+                    // Try to detect CHQ.NO. and WITHDRAWALS adaptively
+                    if (tokens[i] && isAmount(tokens[i])) {
+                        // CHQ.NO. is missing, this is WITHDRAWALS
+                        positionedItems.push({ text: tokens[i], x: headerXMap['WITHDRAWALS'], y: yStr });
+                        i++;
+                    } else {
+                        // CHQ.NO. might be present
+                        if (tokens[i]) {
+                            positionedItems.push({ text: tokens[i], x: headerXMap['CHQ.NO.'], y: yStr });
+                            i++;
+                        }
+                        if (tokens[i] && isAmount(tokens[i])) {
+                            positionedItems.push({ text: tokens[i], x: headerXMap['WITHDRAWALS'], y: yStr });
+                            i++;
+                        }
+                    }
+                    if (secondItem) {
+                        const secondTokens = secondItem.text.trim().split(/\s+/);
+                        if (secondTokens.length === 1 && isBalance(secondTokens[0])) {
+                            positionedItems.push({ text: secondTokens[0], x: headerXMap['BALANCE'], y: yStr });
+                        } else {
+                            if (secondTokens[0] && isAmount(secondTokens[0])) {
+                                positionedItems.push({ text: secondTokens[0], x: headerXMap['DEPOSITS'], y: yStr });
+                            }
+                            if (secondTokens[1] && isBalance(secondTokens[1])) {
+                                positionedItems.push({ text: secondTokens[1], x: headerXMap['BALANCE'], y: yStr });
+                            }
+                        }
+                    }
+                } else {
+                    // Continuation row — treat entire line as extended PARTICULARS
+                    const continuationText = items.map(i => i.text.trim()).join(' ');
+                    positionedItems.push({
+                        text: continuationText,
+                        x: headerXMap['PARTICULARS'],
+                        y: yStr
+                    });
+                }
+            }
+
+            return positionedItems;
+        };
 
         function isValidRow(row, headerXMap) {
             const dateRegex = /^\d{2}-\d{2}-\d{4}$/;
@@ -2051,6 +2193,49 @@ const estimateHeaderXMap = (headerText, baseX = 0, charWidth = 1) => {
     return headerXMap;
 };
 
+const findAnchorHeaders = (headerMap, epsilon = 0.001) => {
+    const anchors = [];
+    const seenX = [];
+
+    for (const [header, x] of Object.entries(headerMap)) {
+        const matched = seenX.find(px => Math.abs(px - x) < epsilon);
+        if (!matched) {
+            anchors.push(header);
+            seenX.push(x);
+        }
+    }
+
+    return anchors;
+};
+
+const reestimateHeaderMap = (headerMap, anchorHeaders, spacing = 3, epsilon = 0.001) => {
+    const estimatedHeaderMap = {};
+    const groups = [];
+
+    // Group headers by x-coordinate
+    for (const [header, x] of Object.entries(headerMap)) {
+        let group = groups.find(g => Math.abs(g.x - x) < epsilon);
+        if (group) {
+            group.headers.push(header);
+        } else {
+            groups.push({ x, headers: [header] });
+        }
+    }
+
+    // Assign real x to anchor headers, synthetic x to others
+    groups.forEach(group => {
+        const anchor = group.headers.find(h => anchorHeaders.includes(h));
+        if (anchor) {
+            group.headers.forEach((header, i) => {
+                estimatedHeaderMap[header] = header === anchor
+                    ? headerMap[header]
+                    : parseFloat((headerMap[anchor] + (i * spacing)).toFixed(3));
+            });
+        }
+    });
+
+    return estimatedHeaderMap;
+};
 
 const removeTableBorders = (rows) => {
     return rows.map(row => ({
