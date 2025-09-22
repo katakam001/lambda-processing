@@ -37,7 +37,7 @@ exports.handler = async (event, context) => {
             console.log("Financial Year:", metadata.financialyear);
             console.log("Type:", metadata.type);
             console.log("Tax Type:", metadata.taxtype);
-            const extractedRecords = await processCSV(fileData.Body);
+            const extractedRecords = await processCSV(fileData.Body,metadata.taxtype);
             await sendMessagesInBatch(extractedRecords, metadata, fileType);
         } else if (fileName.endsWith(".json")) {
             fileType = "json";
