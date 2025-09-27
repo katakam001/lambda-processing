@@ -13,8 +13,17 @@ aws lambda update-function-code --function-name processMediumFileLambda --zip-fi
 aws lambda update-function-code --function-name processLargeFileLambda --zip-file fileb://lambda-code.zip
 
 
+aws lambda update-function-configuration --function-name yourFunctionName --layers arn:aws:lambda:ap-south-2:867344430886:layer:node-modules-layer:1 arn:aws:lambda:ap-south-2:867344430886:layer:GhostscriptLayer:2
+
+
 compress the existing zip file
 Compress-Archive -Update -Path utils,services,index.js,fonts -DestinationPath lambda-code.zip
 
 create a compress archieve using zip.
 Compress-Archive -Path utils,services,fonts,node_modules,index.js -DestinationPath lambda-code.zip
+
+aws lambda publish-layer-version  --layer-name GhostscriptLayer  --description "Ghostscript with shared libraries included" --zip-file fileb://ghostscript-layer.zip  --compatible-runtimes nodejs20.x  --compatible-architectures x86_64
+
+aws lambda publish-layer-version --layer-name node-modules-layer --description "Shared node_modules for Lambda functions" --zip-file fileb://node-layer.zip --compatible-runtimes nodejs20.x
+
+"arn:aws:lambda:ap-south-2:867344430886:layer:node-modules-layer:1"

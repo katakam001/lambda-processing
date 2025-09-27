@@ -3,3 +3,5 @@ lambda-code.zip
 lambda-code_current_prod.zip
 lambda-code_template_changes_finalcode.zip
 ghostscript-layer/ghostscript-layer.zip
+.env.*
+lambda-layer/*

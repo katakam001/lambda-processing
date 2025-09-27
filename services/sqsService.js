@@ -1,8 +1,6 @@
 const { SQSClient, SendMessageBatchCommand } = require("@aws-sdk/client-sqs");
 
-const sqs = new SQSClient({ region: "ap-south-2" });
-const queueUrl = "https://sqs.ap-south-2.amazonaws.com/867344430886/FinancialStatementQueue";
-
+const sqs = new SQSClient({ region: process.env.AWS_REGION });
 
 async function sendMessagesInBatch(records, metadata, fileType) {
     const batchSize = 10;
@@ -117,7 +115,7 @@ async function sendMessagesInBatch(records, metadata, fileType) {
     try {
         for (let i = 0; i < entries.length; i += batchSize) {
             await sqs.send(new SendMessageBatchCommand({
-                QueueUrl: queueUrl,
+                QueueUrl: process.env.SQS_QUEUE_URL,
                 Entries: entries.slice(i, i + batchSize)
             }));
             console.log(`✅ Sent ${Math.min(batchSize, entries.length - i)} messages`);

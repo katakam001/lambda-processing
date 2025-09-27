@@ -1,3 +1,8 @@
+const path = require('path');
+const dotenv = require('dotenv');
+const env = process.env.NODE_ENV || 'development';
+const envPath = path.resolve(__dirname, `.env.${env}`);
+dotenv.config({ path: envPath });
 const { processPDF } = require("./services/pdfProcessor");
 const { processCSV } = require("./services/invoiceProcessor");
 const { sendMessagesInBatch } = require("./services/sqsService");
@@ -5,6 +10,7 @@ const { getFileFromS3 } = require("./services/s3Service");
 const { exportDaybookToPDF } = require("./services/exportService");
 
 exports.handler = async (event, context) => {
+    console.log(`🧪 Loaded environment with no node modules: ${env}`);
     let fileType = "unknown";
     try {
         const record = event.Records[0];

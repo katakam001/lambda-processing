@@ -1,5 +1,5 @@
 const { S3Client, GetObjectCommand, PutObjectCommand } = require("@aws-sdk/client-s3");
-const s3 = new S3Client({ region: "ap-south-2" });
+const s3 = new S3Client({ region: process.env.AWS_REGION });
 
 async function getFileFromS3(bucketName, fileName) {
     const command = new GetObjectCommand({ Bucket: bucketName, Key: fileName });
