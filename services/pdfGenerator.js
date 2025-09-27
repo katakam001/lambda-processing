@@ -575,7 +575,7 @@ async function generatePDFToFile(data, fileType, fileName) {
     docDefinition = buildDocDefinition(data);
   } else if (fileType === "ledger") {
     docDefinition = buildLedgerDocDefinition(data);
-  } else if (fileType === "trailBalance") {
+  } else if (fileType === "trailBalanceExport") {
     docDefinition = buildTrialBalanceDocDefinition(data);
   } else {
     throw new Error(`Unsupported file type: ${fileType}`);

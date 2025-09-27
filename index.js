@@ -1,24 +1,20 @@
 const { processPDF } = require("./services/pdfProcessor");
-const { processCSV } = require("./services/invoiceProcessor"); // ✅ Import CSV processing function
+const { processCSV } = require("./services/invoiceProcessor");
 const { sendMessagesInBatch } = require("./services/sqsService");
 const { getFileFromS3 } = require("./services/s3Service");
-const { exportDaybookToPDF } = require('./services/exportService');
-
+const { exportDaybookToPDF } = require("./services/exportService");
 
 exports.handler = async (event, context) => {
+    let fileType = "unknown";
     try {
         const record = event.Records[0];
         const bucketName = record.s3.bucket.name;
         const fileName = decodeURIComponent(record.s3.object.key.replace(/\+/g, " "));
-
         console.log("Reading file:", fileName);
 
         const fileData = await getFileFromS3(bucketName, fileName);
-
-        // Read & decrypt metadata
         const metadata = fileData.Metadata;
 
-        // If file is a PDF, compress it
         if (fileName.endsWith(".pdf")) {
             fileType = "pdf";
             console.log("Processing PDF...");
@@ -28,8 +24,41 @@ exports.handler = async (event, context) => {
             console.log("User ID", metadata.userid);
             console.log("Financial Year:", metadata.financialyear);
             console.log("File Size:", metadata.filesize);
-            const groupedRecords = await processPDF(fileData.Body, context.awsRequestId, metadata.statementtype, metadata.bankname, metadata.userid, metadata.financialyear, metadata.filesize);
-            await sendMessagesInBatch(groupedRecords, metadata, fileType);
+            try {
+                const groupedRecords = await processPDF(fileData.Body, context.awsRequestId, metadata.statementtype, metadata.bankname, metadata.userid, metadata.financialyear, metadata.filesize);
+                if (!groupedRecords || Object.keys(groupedRecords).length === 0) {
+                    console.warn("⚠️ No records extracted from PDF.");
+
+                    metadata.status = 6; // Treat as failure
+                    metadata.errorMessage = "No data processed";
+
+                    const failureSummary = [{
+                        batchId: metadata.batchid,
+                        totalMessages: 0,
+                        status: 6,
+                        errorMessage: metadata.errorMessage,
+                        timestamp: new Date().toISOString()
+                    }];
+
+                    await sendMessagesInBatch(failureSummary, metadata, "summary");
+                } else {
+                    metadata.status = 5;
+                    await sendMessagesInBatch(groupedRecords, metadata, fileType);
+                }
+            } catch (error) {
+                console.error("PDF processing failed:", error.message);
+
+                const failureSummary = [{
+                    batchId: metadata.batchid,
+                    totalMessages: 0,
+                    status: 6,
+                    errorMessage: error.message,
+                    timestamp: new Date().toISOString()
+                }];
+                metadata.status = 6;
+                metadata.errorMessage = error.message;
+                await sendMessagesInBatch(failureSummary, metadata, "summary");
+            }
         } else if (fileName.endsWith(".csv")) {
             fileType = "csv";
             console.log("Processing CSV...");
@@ -37,8 +66,27 @@ exports.handler = async (event, context) => {
             console.log("Financial Year:", metadata.financialyear);
             console.log("Type:", metadata.type);
             console.log("Tax Type:", metadata.taxtype);
-            const extractedRecords = await processCSV(fileData.Body,metadata.taxtype);
-            await sendMessagesInBatch(extractedRecords, metadata, fileType);
+            console.log("Mode:", metadata.salemode);
+
+            try {
+                const extractedRecords = await processCSV(fileData.Body, metadata.taxtype);
+                metadata.status = 5;
+                await sendMessagesInBatch(extractedRecords, metadata, fileType);
+            } catch (error) {
+                console.error("CSV parsing failed:", error.message);
+
+                const failureSummary = [{
+                    batchId: metadata.batchid,
+                    totalMessages: 0,
+                    status: 6,
+                    errorMessage: error.message,
+                    timestamp: new Date().toISOString()
+                }];
+                metadata.status = 6;
+                metadata.errorMessage = error.message;
+                await sendMessagesInBatch(failureSummary, metadata, "summary");
+            }
+
         } else if (fileName.endsWith(".json")) {
             fileType = "json";
             console.log("🧾 Generating PDF from JSON...");

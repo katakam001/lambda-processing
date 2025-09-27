@@ -7,10 +7,12 @@ const queueUrl = "https://sqs.ap-south-2.amazonaws.com/867344430886/FinancialSta
 async function sendMessagesInBatch(records, metadata, fileType) {
     const batchSize = 10;
     let entries = [];
+    let totalMessages = 0;
 
-    //  Check if it's a PDF or CSV file
+    // PDF - Bank Statement
     if (fileType === "pdf" && metadata.statementtype === "bank") {
         const transactionIds = Object.keys(records);
+        totalMessages = transactionIds.length;
 
         for (let i = 0; i < transactionIds.length; i += batchSize) {
             const batch = transactionIds.slice(i, i + batchSize).map((transactionId, index) => ({
@@ -24,47 +26,57 @@ async function sendMessagesInBatch(records, metadata, fileType) {
                     bankName: { DataType: "String", StringValue: metadata.bankname },
                     accountId: { DataType: "String", StringValue: metadata.accountid },
                     userId: { DataType: "String", StringValue: metadata.userid },
-                    financialYear: { DataType: "String", StringValue: metadata.financialyear }
+                    financialYear: { DataType: "String", StringValue: metadata.financialyear },
+                    batchId: { DataType: "String", StringValue: metadata.batchid }
                 }
             }));
 
             entries.push(...batch);
         }
-    } else if (fileType === "pdf" && metadata.statementtype === "trialBalance") {
-        //  CSV contains individual records, process each separately
+        // PDF - Trial Balance
+    } else if (fileType === "pdf" && metadata.statementtype === "trailBalance") {
+        totalMessages = records.length;
+
         for (let i = 0; i < records.length; i += batchSize) {
             const batch = records.slice(i, i + batchSize).map((record, index) => ({
                 Id: `msg-${i + index}`,
-                MessageBody: JSON.stringify(record), // Each CSV row as a separate message
+                MessageBody: JSON.stringify(record),
                 MessageAttributes: {
                     statementType: { DataType: "String", StringValue: metadata.statementtype },
                     userId: { DataType: "String", StringValue: metadata.userid },
-                    financialYear: { DataType: "String", StringValue: metadata.financialyear }
+                    financialYear: { DataType: "String", StringValue: metadata.financialyear },
+                    batchId: { DataType: "String", StringValue: metadata.batchid }
                 }
             }));
 
             entries.push(...batch);
         }
+        // CSV
     } else if (fileType === "csv") {
-        //  CSV contains individual records, process each separately
+        totalMessages = records.length;
+
         for (let i = 0; i < records.length; i += batchSize) {
             const batch = records.slice(i, i + batchSize).map((record, index) => ({
                 Id: `msg-${i + index}`,
-                MessageBody: JSON.stringify(record), // Each CSV row as a separate message
+                MessageBody: JSON.stringify(record),
                 MessageAttributes: {
                     userId: { DataType: "String", StringValue: metadata.userid },
                     financialYear: { DataType: "String", StringValue: metadata.financialyear },
                     type: { DataType: "String", StringValue: metadata.type },
-                    taxType: { DataType: "String", StringValue: metadata.taxtype }
+                    taxType: { DataType: "String", StringValue: metadata.taxtype },
+                    saleMode: { DataType: "String", StringValue: metadata.salemode },
+                    batchId: { DataType: "String", StringValue: metadata.batchid }
                 }
             }));
 
             entries.push(...batch);
         }
+
+        // JSON (already tracked separately)
     } else if (fileType === "json") {
         const message = {
             Id: "msg-0",
-            MessageBody: JSON.stringify(records[0]), // single status object
+            MessageBody: JSON.stringify(records[0]),
             MessageAttributes: {
                 userId: { DataType: "String", StringValue: metadata.userid },
                 fileType: { DataType: "String", StringValue: metadata.filetype },
@@ -76,19 +88,43 @@ async function sendMessagesInBatch(records, metadata, fileType) {
         entries.push(message);
     }
 
-    //  Send messages to SQS in batches
+    // ✅ Append success summary message (if not JSON)
+    if (fileType !== "json" && (totalMessages > 0 || metadata.status === 6)) {
+        const resolvedFileType = metadata.filetype;
+
+        const summaryMessage = {
+            Id: `summary-${Date.now()}`,
+            MessageBody: JSON.stringify({
+                batchId: metadata.batchid,
+                totalMessages,
+                status: metadata.status,
+                errorMessage: metadata.errorMessage, // optional: include if status === 6
+                timestamp: new Date().toISOString()
+            }),
+            MessageAttributes: {
+                messageType: { DataType: "String", StringValue: "summary" },
+                batchId: { DataType: "String", StringValue: metadata.batchid },
+                userId: { DataType: "String", StringValue: metadata.userid },
+                financialYear: { DataType: "String", StringValue: metadata.financialyear },
+                fileType: { DataType: "String", StringValue: resolvedFileType },
+            }
+        };
+
+        entries.push(summaryMessage);
+    }
+
+    // 🚀 Send messages to SQS in batches
     try {
         for (let i = 0; i < entries.length; i += batchSize) {
-            const response = await sqs.send(new SendMessageBatchCommand({
+            await sqs.send(new SendMessageBatchCommand({
                 QueueUrl: queueUrl,
                 Entries: entries.slice(i, i + batchSize)
             }));
-            console.log(`Successfully sent ${Math.min(batchSize, entries.length - i)} messages`);
+            console.log(`✅ Sent ${Math.min(batchSize, entries.length - i)} messages`);
         }
     } catch (error) {
-        console.error("Error sending batch messages:", error);
+        console.error("❌ Error sending batch messages:", error);
     }
 }
-
 
 module.exports = { sendMessagesInBatch };
