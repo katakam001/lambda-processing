@@ -147,6 +147,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                 /Page\s+\d+\s+Of/i
             ],
             'CENTRAL BANK OF INDIA': [
+                'CLOSING BALANCE:',
                 'CARRIED FORWARD :',
                 /^Statement\s+Downloaded\s+By\s+(.+)$/
             ],
@@ -443,7 +444,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
 
                 }
 
-                if (isHorizontalLineDetected && banksToIncludeParitalMergeHeaders.includes(bankName)) {
+                if (alignments["BALANCE"] && isHorizontalLineDetected && banksToIncludeParitalMergeHeaders.includes(bankName)) {
 
                     const pages = Object.entries(tableDataByPage);
                     const [firstPageKey, firstPageItems] = pages[0];
@@ -462,7 +463,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                     });
 
                 }
-                if (!isHorizontalLineDetected && isParitalHeader && banksToIncludeParitalMergeHeaders.includes(bankName)) {
+                if (alignments["Balance"] && isParitalHeader && banksToIncludeParitalMergeHeaders.includes(bankName)) {
                     const pages = Object.entries(tableDataByPage);
                     const [firstPageKey, firstPageItems] = pages[0];
 
@@ -1019,49 +1020,6 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                     epsilon = 0.675;
                 }
 
-                for (const headerSet of headerVariants) {
-                    if (headerSet.includes(decodedText.trim())) {
-                        // console.log(headerSet);
-                        // console.log(decodedText.trim());
-                        if (banksToIncludeHeadernWithEpsilionVarationWithLatestFormat.includes(bankName) && !isFirstHeaderDetected && headerY && (headerYForBank[bankName].includes(decodedText.trim()))) {
-                            headerY = null;
-                            detectedHeaders.clear();
-                            headerPositionsByPage[currentPage] = {};
-                        }
-                        if (headerY === null) {
-                            if (banksToIncludeHeadernWithEpsilionVarationWithLatestFormat.includes(bankName) && sbifirstHeaders.includes(decodedText.trim())) {
-                                isFirstHeaderDetected = true;
-                            }
-                            headerY = item.y; // First header detected
-                            // console.log(headerY);
-                        }
-
-                        if (Math.abs(item.y - headerY) <= epsilon) {
-                            detectedHeaders.add(decodedText.trim());
-                            if (banksToIncludeHeadersInMultipleLines.includes(bankName)) {
-                                if (!headerPositionsByPage[currentPage].hasOwnProperty(decodedText.trim())) {
-                                    headerPositionsByPage[currentPage][decodedText.trim()] = item.x;
-                                }
-                            } else {
-                                headerPositionsByPage[currentPage][decodedText.trim()] = item.x;
-                            }
-                        }
-
-                        // If we've matched all headers in this variant, mark it as found
-                        if (!headersFound && (detectedHeaders.size === headerSet.length && headerSet.every(header => detectedHeaders.has(header)))) {
-                            for (const header of headerSet) {
-                                // console.log(header);
-                                alignments[header] = detectAlignmentFromText(header);
-                            }
-                            headersFound = true;
-                            isAfterTable = false;
-                            tableEndY = null;
-                            console.log(`Headers detected on Page ${currentPage} using format:`, headerSet);
-                            requiredHeaders = headerSet;
-                            break; // Exit once a matching format is found
-                        }
-                    }
-                }
                 if (banksToIncludeParitalMergeHeaders.includes(bankName)) {
                     for (const headerSet of headerVariants) {
                         const trimmedText = decodedText.trim();
@@ -1105,9 +1063,52 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                             isAfterTable = false;
                             tableEndY = null;
                             isParitalHeader = true;
-                            console.log(`Headers detected on Page ${currentPage} using format:`, headerSet);
+                            console.log(`Headers detected on Page ${currentPage} using parital format:`, headerSet);
                             requiredHeaders = headerSet;
                             break;
+                        }
+                    }
+                }
+                                for (const headerSet of headerVariants) {
+                    if (headerSet.includes(decodedText.trim())) {
+                        // console.log(headerSet);
+                        // console.log(decodedText.trim());
+                        if (banksToIncludeHeadernWithEpsilionVarationWithLatestFormat.includes(bankName) && !isFirstHeaderDetected && headerY && (headerYForBank[bankName].includes(decodedText.trim()))) {
+                            headerY = null;
+                            detectedHeaders.clear();
+                            headerPositionsByPage[currentPage] = {};
+                        }
+                        if (headerY === null) {
+                            if (banksToIncludeHeadernWithEpsilionVarationWithLatestFormat.includes(bankName) && sbifirstHeaders.includes(decodedText.trim())) {
+                                isFirstHeaderDetected = true;
+                            }
+                            headerY = item.y; // First header detected
+                            // console.log(headerY);
+                        }
+
+                        if (Math.abs(item.y - headerY) <= epsilon) {
+                            detectedHeaders.add(decodedText.trim());
+                            if (banksToIncludeHeadersInMultipleLines.includes(bankName)) {
+                                if (!headerPositionsByPage[currentPage].hasOwnProperty(decodedText.trim())) {
+                                    headerPositionsByPage[currentPage][decodedText.trim()] = item.x;
+                                }
+                            } else {
+                                headerPositionsByPage[currentPage][decodedText.trim()] = item.x;
+                            }
+                        }
+
+                        // If we've matched all headers in this variant, mark it as found
+                        if (!headersFound && (detectedHeaders.size === headerSet.length && headerSet.every(header => detectedHeaders.has(header)))) {
+                            for (const header of headerSet) {
+                                // console.log(header);
+                                alignments[header] = detectAlignmentFromText(header);
+                            }
+                            headersFound = true;
+                            isAfterTable = false;
+                            tableEndY = null;
+                            console.log(`Headers detected on Page ${currentPage} using normal format:`, headerSet);
+                            requiredHeaders = headerSet;
+                            break; // Exit once a matching format is found
                         }
                     }
                 }
