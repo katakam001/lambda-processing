@@ -20,7 +20,8 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
         let epsilon = 0.1; // Tolerance for y-position comparison
         const bankHeaders = {
             'UNION BANK OF INDIA': [
-                ["S.No", "Date", "Transaction Id", "Remarks", "Amount(Rs.)", "Balance(Rs.)"]
+                ["S.No", "Date", "Transaction Id", "Remarks", "Amount(Rs.)", "Balance(Rs.)"],
+                ["Date", "Description", "Instrument No", "Withdrawals(Rs.)", "Deposits(Rs.)", "Balance(Rs.)"]
             ],
             'CANARA BANK': [
                 [
@@ -53,7 +54,8 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                 ["Date", "Narration", "Chq./Ref.No.", "Value", "Withdrawal", "Deposit", "Balance"]
             ],
             'ICICI BANK': [
-                ["Sl", "Id", "Value", "Transaction", "Posted", "Cheque no /", "Remarks", "Withdra", "Deposit", "Balance"]
+                ["Sl", "Id", "Value", "Transaction", "Posted", "Cheque no /", "Remarks", "Withdra", "Deposit", "Balance"],
+                ["Sr", "ID", "Value", "Transaction", "Cheque", "Remarks", "Withdrawl", "Deposit", "Balance"]
             ],
             'IDFC FIRST BANK': [
                 ["Transaction", "Value Date", "Particulars", "Cheque", "Debit", "Credit", "Balance"],
@@ -99,7 +101,8 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
         const bankEndMarkers = {
             'UNION BANK OF INDIA': [
                 'Details of statement',
-                'Closing Balance'
+                'Closing Balance',
+                /^Page\s+\d+\s+of\s+\d+$/
             ],
             'CANARA BANK': [
                 /Page\s+\d+\s+of\s+\d+/i,
@@ -178,13 +181,15 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
         const banksToIncludeMergeNarrationLines = ['HDFC BANK']; // add banks as needed
         const banksToIncludeMergeTransactionDetails = ['IDFC FIRST BANK']; // add banks as needed --> validated
         const banksToIncludeCarryForwardLogicToreplaceYAxis = ['IDFC FIRST BANK']; // add banks as needed --> validated
-        const bankshasHeadersInOnePage = ['HDFC BANK', 'ICICI BANK', 'BANK OF INDIA', 'AXIS BANK', 'ANDHRA PRAGATHI GRAMEENA BANK', 'KARUR VYSYA BANK']; // add banks as needed
+        const bankshasHeadersInOnePage = ['HDFC BANK', 'ICICI BANK', 'BANK OF INDIA', 'AXIS BANK', 'ANDHRA PRAGATHI GRAMEENA BANK', 'KARUR VYSYA BANK', 'UNION BANK OF INDIA']; // add banks as needed
         const bankToIncludeValidateHeaderWithCustomParameter = ['HDFC BANK', 'BANK OF INDIA', 'AXIS BANK', 'KARUR VYSYA BANK']; // add banks as needed
         const bankToIncludeValidateHeaderWithMonthName = ['KARUR VYSYA BANK']; // add banks as needed
         const banksToIncludeRefineCreditAndBalance = ['CENTRAL BANK OF INDIA']; // add banks as needed
         const banksToIncludeRefineChequeAndAccountDescription = ['CENTRAL BANK OF INDIA']; // add banks as needed
         const banksToIncludeRefineBranchAndParticulars = ['KARUR VYSYA BANK']; // add banks as needed
         const bankToIncludeValidateHeaderWithTransactionId = ['ICICI BANK']; // add banks as needed
+        const bankToIncludeValidateHeaderWithTimeStamp = ['UNION BANK OF INDIA']; // add banks as needed
+        const banksToIncludeChangeHeadersXAxisForAmounts = ['UNION BANK OF INDIA']; // add banks as needed
         const banksToIncludeMergeHeaders = ['CITY UNION BANK', 'ANDHRA PRAGATHI GRAMEENA BANK']; // add banks as needed
         const banksToIncludeMergeHeadersInOnePage = ['ANDHRA PRAGATHI GRAMEENA BANK']; // add banks as needed
         const banksToIncludeParitalMergeHeaders = ['CENTRAL BANK OF INDIA', 'BANK OF BARODA']; // add banks as needed
@@ -638,7 +643,10 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                             // 🔎 Look for one valid row group with 6 items and semantic pattern match
 
                             const validRowGroup = Object.values(yGroups).find(group => {
-                                return group.some(({ text }) => /^S\d{4}\s\d{4}$/.test(text.trim()));
+                                return group.some(({ text }) =>
+                                    /^S\d{4}\s\d{4}$/.test(text.trim()) ||  // Format: S1234 5678
+                                    /^S\d{6,7}$/.test(text.trim())         // Format: S123456 or S1234567
+                                );
                             });
 
                             // console.log(validRowGroup);
@@ -654,13 +662,45 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                                 // console.log(`📦 Fallback table injected for page ${page} using semantic match.`);
                             }
                         }
+                        if (bankToIncludeValidateHeaderWithTimeStamp.includes(bankName) && alignments["Instrument No"]) {
+                            if (parseInt(page) === 1)
+                                rawItemsByPage[page] = tableDataByPage[page];
+
+                            // console.log(rawItemsByPage[page]);
+
+                            const mergedXAxisrows = combineMultiLineRows(rawItemsByPage[page]);
+                            // console.log(mergedXAxisrows);
+                            const mergeWrappedAmount = combineWrappedAmounts(mergedXAxisrows);
+                            // console.log(mergeWrappedAmount);
+
+                            // 📐 Group by Y-axis
+                            const yGroups = {};
+                            mergeWrappedAmount.forEach(({ text, x, y }) => {
+                                const key = Math.round(y * 10); // Bucket by 0.1 resolution
+                                yGroups[key] = yGroups[key] || [];
+                                yGroups[key].push({ text, x, y });
+                            });
+
+                            // 🔎 Look for one valid row group with 6 items and semantic pattern match
+
+                            const validDateGroups = Object.values(yGroups).filter(group =>
+                                group.some(({ text }) =>
+                                    /^\d{2}-\d{2}-\d{4} \d{2}:\d{2}:\d{2}$/.test(text.trim())
+                                )
+                            );
+
+                            const flattened = Object.values(validDateGroups).flat();
+                            tableDataByPage[page] = flattened;
+                        }
                     });
 
                     const firstHeaderPositions = headerPositionsByPage[1]; // Assuming page 1 always has headers
                     console.log(firstHeaderPositions);
 
                     Object.keys(tableDataByPage).forEach(page => {
-                        if (parseInt(page) === 1) return; // ⛔ Skip Page 1 — already handled
+                        if (!banksToIncludeChangeHeadersXAxisForAmounts.includes(bankName)) {
+                            if (parseInt(page) === 1) return; // ⛔ Skip Page 1 — already handled
+                        }
 
                         const narrationOverride = headerPositionsByPage[page]?.["Narration"];
 
@@ -672,6 +712,13 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                             headerPositionsByPage[page]["Narration"] = narrationOverride;
                             // console.log(`🎯 Retained Narration x=${narrationOverride} on Page ${page}`);
                         }
+
+                        // 🎯 Apply +2 offset to selected headers
+                        ["Instrument No", "Withdrawals(Rs.)", "Deposits(Rs.)", "Balance(Rs.)"].forEach(header => {
+                            if (headerPositionsByPage[page][header] !== undefined) {
+                                headerPositionsByPage[page][header] += 2;
+                            }
+                        });
 
                         // console.log(`🌀 Header positions cloned to Page ${page}`);
                     });
@@ -1008,7 +1055,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                     }
                 }
                 if (banksToIncludeHeadersInMultipleLines.includes(bankName)) {
-                    epsilon = 0.5;
+                    epsilon = 0.675;
                 }
                 if (banksToIncludeHeadernWithEpsilionVaration.includes(bankName)) {
                     epsilon = 0.3;
@@ -1069,7 +1116,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                         }
                     }
                 }
-                                for (const headerSet of headerVariants) {
+                for (const headerSet of headerVariants) {
                     if (headerSet.includes(decodedText.trim())) {
                         // console.log(headerSet);
                         // console.log(decodedText.trim());
@@ -1309,8 +1356,8 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
             const formattedDate = standardizeDate(rawDate);
             // console.log(rawDate, formattedDate);
 
-            const rawDebit = row[lowerMap['debit']] || row[lowerMap['debits']] || row[lowerMap['withdrawal']] || row[lowerMap['withdrawals']] || row[lowerMap['withdra']] || (row[lowerMap['amount(rs.)']]?.includes('Dr') ? row[lowerMap['amount(rs.)']] : '');
-            const rawCredit = row[lowerMap['credit']] || row[lowerMap['credits']] || row[lowerMap['deposit']] || row[lowerMap['deposits']] || (row[lowerMap['amount(rs.)']]?.includes('Cr') ? row[lowerMap['amount(rs.)']] : '');
+            const rawDebit = row[lowerMap['debit']] || row[lowerMap['debits']] || row[lowerMap['withdrawal']] || row[lowerMap['withdrawals']] || row[lowerMap['withdrawals(rs.)']] || row[lowerMap['withdra']] || row[lowerMap['withdrawl']] || (row[lowerMap['amount(rs.)']]?.includes('Dr') ? row[lowerMap['amount(rs.)']] : '');
+            const rawCredit = row[lowerMap['credit']] || row[lowerMap['credits']] || row[lowerMap['deposit']] || row[lowerMap['deposits']] || row[lowerMap['deposits(rs.)']] || (row[lowerMap['amount(rs.)']]?.includes('Cr') ? row[lowerMap['amount(rs.)']] : '');
 
             const debit = cleanAmount(rawDebit);
             const credit = cleanAmount(rawCredit);
@@ -1342,6 +1389,17 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
 
         function standardizeDate(dateStr = '') {
             const trimmed = dateStr.trim();
+
+            // ✅ Match DD-MM-YYYY HH:MM:SS or DD/MM/YYYY HH:MM:SS
+            const datetimeMatch = trimmed.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/);
+            if (datetimeMatch) {
+                const [_, dd, mm, yyyy] = datetimeMatch;
+                const isoStr = `${yyyy}-${mm}-${dd}T${datetimeMatch[4]}:${datetimeMatch[5]}:${datetimeMatch[6]}`;
+                const parsed = new Date(isoStr);
+                if (!isNaN(parsed)) {
+                    return `${dd}/${mm}/${yyyy}`;
+                }
+            }
 
             // Match DD-MM-YYYY or DD/MM/YYYY
             const ddmmyyyyMatch = trimmed.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/);
@@ -2884,7 +2942,7 @@ const cleanChequeNoFromAmount = (groupedByY, headerXMap, epsilon = 0.01) => {
 const detectAlignmentFromText = (text) => {
     const t = text.trim();
 
-    if (/^(Debit|Credit|Balance|Amount|Withdrawal|Deposit)$/i.test(t)) return 'right'; // numerical columns
+    if (/^(Debit|Credit|Balance|Amount|Withdrawal|Deposit|Instrument No)$/i.test(t)) return 'right'; // numerical columns
     if (/^(Date|Sr No|Remarks|Description)$/i.test(t)) return 'left'; // typical text fields
     if (/^[A-Z\s]+$/.test(t) && t.length < 20) return 'center'; // maybe labels
 
