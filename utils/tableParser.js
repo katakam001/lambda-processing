@@ -52,7 +52,8 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                 ["Post Date", "Value Date", "Details", "Chq.No.", "Debit", "Credit", "Balance"],
             ],
             'HDFC BANK': [
-                ["Date", "Narration", "Chq./Ref.No.", "Value", "Withdrawal", "Deposit", "Balance"]
+                ["Date", "Narration", "Chq./Ref.No.", "Value", "Withdrawal", "Deposit", "Balance"],
+                ["Date", "Narration", "Chq. / Ref No.", "Value Date", "Withdrawal Amount", "Deposit Amount", "Closing Balance*"]
             ],
             'ICICI BANK': [
                 ["Sl", "Id", "Value", "Transaction", "Posted", "Cheque no /", "Remarks", "Withdra", "Deposit", "Balance"],
@@ -126,7 +127,10 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
             ],
             'HDFC BANK': [
                 'STATEMENTSUMMARY',
-                'Page'
+                'STATEMENT SUMMARY :-',
+                'Cr Count',
+                'Page',
+                /Generation Date\s*:\s*\d{2}-[A-Za-z]{3}-\d{2,4}\s+\d{2}:\d{2}/
 
             ],
             'CITY UNION BANK': [
@@ -578,7 +582,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
 
                             // 🔎 Look for one valid row group with 6 items and semantic pattern match
                             let validRowGroup;
-                            if (banksToIncludeRefineRefNoAndNarration.includes(bankName)) {
+                            if (banksToIncludeRefineRefNoAndNarration.includes(bankName) && alignments["Withdrawal"]) {
                                 validRowGroup = Object.values(yGroups).find(group => {
                                     if (group.length < 6) return false;
 
@@ -710,6 +714,13 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                             );
 
                             const flattened = Object.values(validDateGroups).flat();
+                            tableDataByPage[page] = flattened;
+                        }
+                        // console.log(alignments);
+                        if (banksToIncludeRefineRefNoAndNarration.includes(bankName) && alignments["Withdrawal Amount"]) {
+                            const groupByY = groupItemsByY(items, 0.3);
+                            const filterGroupByY = getGroupsFromValidOnward(groupByY);
+                            const flattened = Object.values(filterGroupByY).flat();
                             tableDataByPage[page] = flattened;
                         }
                     });
@@ -940,6 +951,10 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                                 }
                             }
 
+                            if (banksToIncludeRefineRefNoAndNarration.includes(bankName) && alignments["Withdrawal Amount"]) {
+                                carryForwardRows = [];
+                            }
+
                             console.log(carryForwardRows);
                             mergedDates.push(...carryForwardRows);
                         }
@@ -948,7 +963,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                     // console.log(mergedDates);
 
                     let combinedRows = null;
-                    if (banksToIncludeMergeNarrationLines.includes(bankName)) {
+                    if (banksToIncludeMergeNarrationLines.includes(bankName) && alignments["Withdrawal"]) {
 
                         const narrationX = columnXMap["Narration"];
                         const dateX = columnXMap["Date"];
@@ -1376,8 +1391,8 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
             const formattedDate = standardizeDate(rawDate);
             // console.log(rawDate, formattedDate);
 
-            const rawDebit = row[lowerMap['debit']] || row[lowerMap['debits']] || row[lowerMap['withdrawal']] || row[lowerMap['withdrawals']] || row[lowerMap['withdrawals(rs.)']] || row[lowerMap['withdra']] || row[lowerMap['withdrawl']] || (row[lowerMap['amount(rs.)']]?.includes('Dr') ? row[lowerMap['amount(rs.)']] : '');
-            const rawCredit = row[lowerMap['credit']] || row[lowerMap['credits']] || row[lowerMap['deposit']] || row[lowerMap['deposits']] || row[lowerMap['deposits(rs.)']] || (row[lowerMap['amount(rs.)']]?.includes('Cr') ? row[lowerMap['amount(rs.)']] : '');
+            const rawDebit = row[lowerMap['debit']] || row[lowerMap['debits']] || row[lowerMap['withdrawal']] || row[lowerMap['withdrawals']] || row[lowerMap['withdrawal amount']] || row[lowerMap['withdrawals(rs.)']] || row[lowerMap['withdra']] || row[lowerMap['withdrawl']] || (row[lowerMap['amount(rs.)']]?.includes('Dr') ? row[lowerMap['amount(rs.)']] : '');
+            const rawCredit = row[lowerMap['credit']] || row[lowerMap['credits']] || row[lowerMap['deposit']] || row[lowerMap['deposits']] || row[lowerMap['deposit amount']] || row[lowerMap['deposits(rs.)']] || (row[lowerMap['amount(rs.)']]?.includes('Cr') ? row[lowerMap['amount(rs.)']] : '');
 
             const debit = cleanAmount(rawDebit);
             const credit = cleanAmount(rawCredit);
@@ -1385,7 +1400,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
             const finalDebit = debit !== '0.00' ? debit : '0.00';
             const finalCredit = credit !== '0.00' ? credit : '0.00';
 
-            const balanceRaw = row[lowerMap['balance']] || row[lowerMap['balance(rs.)']] || row[lowerMap['balancer']] || row[lowerMap['available bal.']] || '';
+            const balanceRaw = row[lowerMap['balance']] || row[lowerMap['balance(rs.)']] || row[lowerMap['balancer']] || row[lowerMap['available bal.']] || row[lowerMap['closing balance*']] || '';
             const balance = balanceRaw ? cleanAmount(balanceRaw) : '0.00';
 
             // let reference = row[lowerMap['transaction id']] || row[lowerMap['ref no./cheque']] || row[lowerMap['ref/cheque']] || row[lowerMap['cheque no']] || row[lowerMap['cheque no.']] || row[lowerMap['cheque']] || row[lowerMap['chq no']] || row[lowerMap['chq./ref.no.']] || row[lowerMap['chq-no']] || row[lowerMap['id']] || '';
@@ -2701,6 +2716,45 @@ const filterValidGroups = (groupedByY, expectedHeaders) => {
     }
 
     return validGroups;
+};
+
+const findFirstValidGroupKey = yGroups => {
+    for (const [yKey, group] of Object.entries(yGroups)) {
+        if (group.length < 6) continue;
+
+        let dateCount = 0;
+        let amountCount = 0;
+        let textCount = 0;
+
+        group.forEach(({ text }) => {
+            const txt = text.trim();
+            if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$/.test(txt)) dateCount++;
+            else if (/^[₹]?[0-9,]+\.\d{2}$/.test(txt)) amountCount++;
+            else if (/\w/.test(txt)) textCount++;
+        });
+
+        if (dateCount >= 2 && amountCount >= 2 && textCount >= 2) {
+            return yKey;
+        }
+    }
+
+    return null;
+};
+
+const getGroupsFromValidOnward = yGroups => {
+    const validKey = findFirstValidGroupKey(yGroups);
+    if (!validKey) return {};
+
+    const validY = parseFloat(validKey);
+    const filtered = {};
+
+    for (const [yKey, group] of Object.entries(yGroups)) {
+        if (parseFloat(yKey) >= validY) {
+            filtered[yKey] = group;
+        }
+    }
+
+    return filtered;
 };
 
 const cleanGroupedByYAxis = (groupedByYAxis) => {
