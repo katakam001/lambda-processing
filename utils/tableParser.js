@@ -21,7 +21,8 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
         const bankHeaders = {
             'UNION BANK OF INDIA': [
                 ["S.No", "Date", "Transaction Id", "Remarks", "Amount(Rs.)", "Balance(Rs.)"],
-                ["Date", "Description", "Instrument No", "Withdrawals(Rs.)", "Deposits(Rs.)", "Balance(Rs.)"]
+                ["Date", "Description", "Instrument No", "Withdrawals(Rs.)", "Deposits(Rs.)", "Balance(Rs.)"],
+                ["DATE", "PARTICULARS", "CHQ.NO.", "WITHDRAWALS", "DEPOSITS", "BALANCE"]
             ],
             'CANARA BANK': [
                 [
@@ -192,13 +193,14 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
         const banksToIncludeChangeHeadersXAxisForAmounts = ['UNION BANK OF INDIA']; // add banks as needed
         const banksToIncludeMergeHeaders = ['CITY UNION BANK', 'ANDHRA PRAGATHI GRAMEENA BANK']; // add banks as needed
         const banksToIncludeMergeHeadersInOnePage = ['ANDHRA PRAGATHI GRAMEENA BANK']; // add banks as needed
-        const banksToIncludeParitalMergeHeaders = ['CENTRAL BANK OF INDIA', 'BANK OF BARODA']; // add banks as needed
+        const banksToIncludeParitalMergeHeaders = ['CENTRAL BANK OF INDIA', 'BANK OF BARODA', 'UNION BANK OF INDIA']; // add banks as needed
         const banksToIncludeHorizontalLine = ['BANK OF INDIA']; // add banks as needed
         const banksToIncludeHeadersInMultipleLines = ['ICICI BANK']; // add banks as needed
         const banksToIncludeHeadernWithEpsilionVaration = ['IDFC FIRST BANK']; // add banks as needed --> validated
         const banksToIncludeHeadernWithEpsilionVarationWithLatestFormat = ['SBI']; // add banks as needed --> validated
         const banksToIncludeHeadernWithEpsilionVarationWithTwoTypesOfHeaders = ['INDIAN BANK']; // add banks as needed --> validated
         const banksToFilterUnnecessaryDataWithtableEndY = ['SBI']; // add banks as needed --> validated
+        const banksToFilterMultipleHeaderInSamePage = ['UNION BANK OF INDIA']; // add banks as needed --> validated
         const banksToIncludeHeadersAlign = ['BANK OF INDIA', 'HDFC BANK', 'KARUR VYSYA BANK']; // add banks as needed
         const banksToIncludeChangeHeadersAlign = ['HDFC BANK']; // add banks as needed
         const banksToIncludeChangeHeadersAlignWithAmounts = ['KARUR VYSYA BANK']; // add banks as needed
@@ -450,8 +452,20 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                 }
 
                 if (alignments["BALANCE"] && isHorizontalLineDetected && banksToIncludeParitalMergeHeaders.includes(bankName)) {
+                    let pages = null;
 
-                    const pages = Object.entries(tableDataByPage);
+                    if (banksToFilterMultipleHeaderInSamePage.includes(bankName)) {
+                        pages = Object.entries(rawItemsByPage).map(([pageNum, data], index) => {
+                            if (index === 0) {
+                                // Override first page with tableDataByPage
+                                const override = tableDataByPage[pageNum];
+                                return [pageNum, override ?? data]; // fallback if override missing
+                            }
+                            return [pageNum, data];
+                        });
+                    } else {
+                        pages = Object.entries(tableDataByPage);
+                    }
                     const [firstPageKey, firstPageItems] = pages[0];
                     const headerXMap = reestimateHeaderMap(headerPositionsByPage[firstPageKey], findAnchorHeaders(headerPositionsByPage[firstPageKey])); // baseX and charWidth can be tuned
                     // console.log(headerXMap);
@@ -462,8 +476,14 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                             const text = item.text?.trim();
                             return text && !isHorizontalLine(text);
                         });
-                        const groupByY = groupItemsByY(filteredItems, 0.01);
-                        let flattened = Object.values(parseStructuredRows(groupByY, headerPositionsByPage[page])).flat();
+                        let groupByY = groupItemsByY(filteredItems, 0.01);
+                        let flattened = null
+                        if (banksToFilterMultipleHeaderInSamePage.includes(bankName)) {
+                            groupByY = filterValidGroups(groupByY, Object.keys(headerPositionsByPage[page]));
+                            flattened = Object.values(parseGroupRows(groupByY, headerPositionsByPage[page])).flat();
+                        } else {
+                            flattened = Object.values(parseStructuredRows(groupByY, headerPositionsByPage[page])).flat();
+                        }
                         tableDataByPage[page] = flattened
                     });
 
@@ -1603,6 +1623,88 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
             return positionedItems;
         };
 
+        const parseGroupRows = (groupByY, headerXMap, epsilon = 0.01) => {
+            const positionedItems = [];
+
+
+            const isAmount = str => /^[\d,]+\.\d{2}$/.test(str.trim());
+            const isBalance = str => /^[\d,]+\.\d{2}(Cr|Dr)?$/.test(str.trim());
+            const isChqNo = str => /^\d{6}$/.test(str.trim()); // Exactly 6 digits
+
+            const sortedYKeys = Object.keys(groupByY).sort((a, b) => parseFloat(a) - parseFloat(b));
+
+            for (const yStr of sortedYKeys) {
+                const items = groupByY[yStr];
+                if (!items || items.length === 0) continue;
+
+                const hasBF = items.some(item => /B\/F/i.test(item.text));
+                if (hasBF) continue;
+
+                const firstText = items[0].text.trim();
+                const secondText = items[1]?.text.trim() ?? '';
+
+                const dateMatch = firstText.match(/^(\d{2}-\d{2}-\d{4})/);
+                const date = dateMatch?.[0];
+                const rest = date ? firstText.slice(date.length).trim() : firstText;
+
+                if (date) {
+                    positionedItems.push({ text: date, x: headerXMap['DATE'], y: yStr });
+
+                    // Extract withdrawal from end
+                    const withdrawalMatch = rest.match(/([\d,]+\.\d{2})\s*$/);
+                    const withdrawal = withdrawalMatch?.[1];
+                    const restWithoutWithdrawal = withdrawal
+                        ? rest.slice(0, rest.lastIndexOf(withdrawal)).trim()
+                        : rest;
+
+                    // ✅ Split CHQ.NO. from end if it's a 6-digit number
+                    const tokens = restWithoutWithdrawal.split(/\s+/);
+                    const lastToken = tokens[tokens.length - 1];
+                    let chqNo = null;
+                    let particulars = restWithoutWithdrawal;
+
+                    if (isChqNo(lastToken)) {
+                        chqNo = lastToken;
+                        particulars = tokens.slice(0, -1).join(' ');
+                    }
+
+                    positionedItems.push({ text: particulars, x: headerXMap['PARTICULARS'], y: yStr });
+
+                    if (chqNo) {
+                        positionedItems.push({ text: chqNo, x: headerXMap['CHQ.NO.'], y: yStr });
+                    }
+
+                    if (withdrawal) {
+                        positionedItems.push({ text: withdrawal, x: headerXMap['WITHDRAWALS'], y: yStr });
+                    }
+
+                    // ✅ Handle second line
+                    const secondTokens = secondText.split(/\s+/);
+                    if (secondTokens.length === 1 && isBalance(secondTokens[0])) {
+                        positionedItems.push({ text: secondTokens[0], x: headerXMap['BALANCE'], y: yStr });
+                    } else {
+                        if (secondTokens[0] && isAmount(secondTokens[0])) {
+                            positionedItems.push({ text: secondTokens[0], x: headerXMap['DEPOSITS'], y: yStr });
+                        }
+                        if (secondTokens[1] && isBalance(secondTokens[1])) {
+                            positionedItems.push({ text: secondTokens[1], x: headerXMap['BALANCE'], y: yStr });
+                        }
+                    }
+                } else {
+                    // Continuation row — treat entire line as extended PARTICULARS
+                    const continuationText = items.map(i => i.text.trim()).join(' ');
+                    positionedItems.push({
+                        text: continuationText,
+                        x: headerXMap['PARTICULARS'],
+                        y: yStr
+                    });
+                }
+            }
+
+            return positionedItems;
+        };
+
+
         function isValidRow(row, headerXMap) {
             const dateRegex = /^\d{2}-\d{2}-\d{4}$/;
             const amountRegex = /^\d+\.\d{2}$/;
@@ -2568,6 +2670,38 @@ const filterGroupedByY = (groupedByY, thresholdY) => {
     return filtered;
 };
 
+const filterValidGroups = (groupedByY, expectedHeaders) => {
+    let skipMode = false;
+    const validGroups = {};
+
+    const isHeaderGroup = group => {
+        const combinedText = group.map(({ text }) => text.trim()).join(' ').replace(/\s+/g, ' ').toUpperCase();
+        return expectedHeaders.every(header => combinedText.includes(header));
+    };
+
+    for (const [yKey, group] of Object.entries(groupedByY)) {
+        if (!skipMode) {
+            const containsCumulativeTotals = group.some(({ text }) =>
+                /Cumulative Totals:/i.test(text.trim())
+            );
+
+            if (containsCumulativeTotals) {
+                skipMode = true;
+                continue;
+            }
+
+            validGroups[yKey] = group;
+        } else {
+            if (isHeaderGroup(group)) {
+                skipMode = false;
+                continue;
+            }
+            // Still skipping — do nothing
+        }
+    }
+
+    return validGroups;
+};
 
 const cleanGroupedByYAxis = (groupedByYAxis) => {
     const cleaned = {};
