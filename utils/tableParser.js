@@ -88,6 +88,9 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                 ["Txn", "Value", "Brn", "Particulars", "Ref. No", "Debit", "Credit", "Balance"],
                 ["TXN DATE", "VALUE DATE", "DESCRIPTION", "DEBIT", "CREDIT", "BALANCE"]
             ],
+            'INDIAN OVERSEAS BANK': [
+                ["Date(Value", "Particulars", "Ref No.", "Type", "Debit(Rs)", "Credit(Rs)", "Balance(Rs)"]
+            ],
             // Add more banks dynamically
         };
 
@@ -171,10 +174,13 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                 'Total Amount Recovered till date (Principal , Interest, Charges)',
                 /^Page:\s*\d+$/
             ],
+            'INDIAN OVERSEAS BANK': [
+                /Effective available balance as on\s*(.*)/
+            ],
             // Add more banks as needed
         };
 
-        const banksToExcludeCarryForward = ['UNION BANK OF INDIA', 'CANARA BANK', 'SBI', 'CITY UNION BANK', 'AXIS BANK', 'BANK OF BARODA', 'KARUR VYSYA BANK']; // add banks as needed
+        const banksToExcludeCarryForward = ['UNION BANK OF INDIA', 'CANARA BANK', 'SBI', 'CITY UNION BANK', 'AXIS BANK', 'BANK OF BARODA', 'KARUR VYSYA BANK','INDIAN OVERSEAS BANK']; // add banks as needed
         const banksToIncludeHeadernWithBroughtForwardToExcludeCarryForward = ['INDIAN BANK']; // add banks as needed --> validated
         const banksToIncludeRefineRefNoAndNarration = ['HDFC BANK']; // add banks as needed
         const banksToIncludeRefineTransactionIdAndNarration = ['UNION BANK OF INDIA']; // add banks as needed
@@ -186,7 +192,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
         const banksToIncludeMergeNarrationLines = ['HDFC BANK']; // add banks as needed
         const banksToIncludeMergeTransactionDetails = ['IDFC FIRST BANK']; // add banks as needed --> validated
         const banksToIncludeCarryForwardLogicToreplaceYAxis = ['IDFC FIRST BANK']; // add banks as needed --> validated
-        const bankshasHeadersInOnePage = ['HDFC BANK', 'ICICI BANK', 'BANK OF INDIA', 'AXIS BANK', 'ANDHRA PRAGATHI GRAMEENA BANK', 'KARUR VYSYA BANK', 'UNION BANK OF INDIA']; // add banks as needed
+        const bankshasHeadersInOnePage = ['HDFC BANK', 'ICICI BANK', 'BANK OF INDIA', 'AXIS BANK', 'ANDHRA PRAGATHI GRAMEENA BANK', 'KARUR VYSYA BANK', 'UNION BANK OF INDIA', 'INDIAN OVERSEAS BANK']; // add banks as needed
         const bankToIncludeValidateHeaderWithCustomParameter = ['HDFC BANK', 'BANK OF INDIA', 'AXIS BANK', 'KARUR VYSYA BANK']; // add banks as needed
         const bankToIncludeValidateHeaderWithMonthName = ['KARUR VYSYA BANK']; // add banks as needed
         const banksToIncludeRefineCreditAndBalance = ['CENTRAL BANK OF INDIA']; // add banks as needed
@@ -194,13 +200,14 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
         const banksToIncludeRefineBranchAndParticulars = ['KARUR VYSYA BANK']; // add banks as needed
         const bankToIncludeValidateHeaderWithTransactionId = ['ICICI BANK']; // add banks as needed
         const bankToIncludeValidateHeaderWithTimeStamp = ['UNION BANK OF INDIA']; // add banks as needed
-        const banksToIncludeChangeHeadersXAxisForAmounts = ['UNION BANK OF INDIA']; // add banks as needed
+        const banksToIncludeChangeHeadersXAxisForAmounts = ['UNION BANK OF INDIA','INDIAN OVERSEAS BANK']; // add banks as needed
         const banksToIncludeMergeHeaders = ['CITY UNION BANK', 'ANDHRA PRAGATHI GRAMEENA BANK']; // add banks as needed
         const banksToIncludeMergeHeadersInOnePage = ['ANDHRA PRAGATHI GRAMEENA BANK']; // add banks as needed
         const banksToIncludeParitalMergeHeaders = ['CENTRAL BANK OF INDIA', 'BANK OF BARODA', 'UNION BANK OF INDIA']; // add banks as needed
         const banksToIncludeHorizontalLine = ['BANK OF INDIA']; // add banks as needed
         const banksToIncludeHeadersInMultipleLines = ['ICICI BANK']; // add banks as needed
         const banksToIncludeHeadernWithEpsilionVaration = ['IDFC FIRST BANK']; // add banks as needed --> validated
+        const banksToIncludeHeadernWithEpsilionChangeWithTwoDates = ['INDIAN OVERSEAS BANK']; // add banks as needed --> validated
         const banksToIncludeHeadernWithEpsilionVarationWithLatestFormat = ['SBI']; // add banks as needed --> validated
         const banksToIncludeHeadernWithEpsilionVarationWithTwoTypesOfHeaders = ['INDIAN BANK']; // add banks as needed --> validated
         const banksToFilterUnnecessaryDataWithtableEndY = ['SBI']; // add banks as needed --> validated
@@ -723,6 +730,15 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                             const flattened = Object.values(filterGroupByY).flat();
                             tableDataByPage[page] = flattened;
                         }
+                        if (banksToIncludeHeadernWithEpsilionChangeWithTwoDates.includes(bankName)) {
+                            const groupByY = groupItemsByY(items, 0.55);
+                            const filterGroupByY = getGroupsFromValidOnward(groupByY, true);
+                            // console.log(filterGroupByY);
+                            const flattened = Object.values(filterGroupByY).flat();
+                            tableDataByPage[page] = flattened.filter(row =>
+                                !/^\(\d{1,2}-[A-Za-z]{3}-\d{2}\)$/.test(row.text.trim())
+                            );
+                        }
                     });
 
                     const firstHeaderPositions = headerPositionsByPage[1]; // Assuming page 1 always has headers
@@ -748,6 +764,12 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                         ["Instrument No", "Withdrawals(Rs.)", "Deposits(Rs.)", "Balance(Rs.)"].forEach(header => {
                             if (headerPositionsByPage[page][header] !== undefined) {
                                 headerPositionsByPage[page][header] += 2;
+                            }
+                        });
+                        
+                        ["Debit(Rs)", "Credit(Rs)"].forEach(header => {
+                            if (headerPositionsByPage[page][header] !== undefined) {
+                                headerPositionsByPage[page][header] += 1;
                             }
                         });
 
@@ -1101,7 +1123,9 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                 if (banksToIncludeHeadernWithEpsilionVarationWithTwoTypesOfHeaders.includes(bankName)) {
                     epsilon = 0.675;
                 }
-
+                if (banksToIncludeHeadernWithEpsilionChangeWithTwoDates.includes(bankName)) {
+                    epsilon = 0.55;
+                }
                 if (banksToIncludeParitalMergeHeaders.includes(bankName)) {
                     for (const headerSet of headerVariants) {
                         const trimmedText = decodedText.trim();
@@ -1387,12 +1411,12 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
             const keys = Object.keys(row);
             const lowerMap = Object.fromEntries(keys.map(k => [k.toLowerCase(), k]));
 
-            const rawDate = row[lowerMap['date']] || row[lowerMap['value date']] || row[lowerMap['txn date']] || row[lowerMap['transaction']] || row[lowerMap['value']] || row[lowerMap['trans date and']] || row[lowerMap['tran date']] || '';
+            const rawDate = row[lowerMap['date']] || row[lowerMap['value date']] || row[lowerMap['txn date']] || row[lowerMap['transaction']] || row[lowerMap['value']] || row[lowerMap['trans date and']] || row[lowerMap['tran date']] || row[lowerMap['date(value']] || '';
             const formattedDate = standardizeDate(rawDate);
             // console.log(rawDate, formattedDate);
 
-            const rawDebit = row[lowerMap['debit']] || row[lowerMap['debits']] || row[lowerMap['withdrawal']] || row[lowerMap['withdrawals']] || row[lowerMap['withdrawal amount']] || row[lowerMap['withdrawals(rs.)']] || row[lowerMap['withdra']] || row[lowerMap['withdrawl']] || (row[lowerMap['amount(rs.)']]?.includes('Dr') ? row[lowerMap['amount(rs.)']] : '');
-            const rawCredit = row[lowerMap['credit']] || row[lowerMap['credits']] || row[lowerMap['deposit']] || row[lowerMap['deposits']] || row[lowerMap['deposit amount']] || row[lowerMap['deposits(rs.)']] || (row[lowerMap['amount(rs.)']]?.includes('Cr') ? row[lowerMap['amount(rs.)']] : '');
+            const rawDebit = row[lowerMap['debit']] || row[lowerMap['debits']] || row[lowerMap['debit(rs)']] || row[lowerMap['withdrawal']] || row[lowerMap['withdrawals']] || row[lowerMap['withdrawal amount']] || row[lowerMap['withdrawals(rs.)']] || row[lowerMap['withdra']] || row[lowerMap['withdrawl']] || (row[lowerMap['amount(rs.)']]?.includes('Dr') ? row[lowerMap['amount(rs.)']] : '');
+            const rawCredit = row[lowerMap['credit']] || row[lowerMap['credits']] || row[lowerMap['credit(rs)']] || row[lowerMap['deposit']] || row[lowerMap['deposits']] || row[lowerMap['deposit amount']] || row[lowerMap['deposits(rs.)']] || (row[lowerMap['amount(rs.)']]?.includes('Cr') ? row[lowerMap['amount(rs.)']] : '');
 
             const debit = cleanAmount(rawDebit);
             const credit = cleanAmount(rawCredit);
@@ -1400,7 +1424,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
             const finalDebit = debit !== '0.00' ? debit : '0.00';
             const finalCredit = credit !== '0.00' ? credit : '0.00';
 
-            const balanceRaw = row[lowerMap['balance']] || row[lowerMap['balance(rs.)']] || row[lowerMap['balancer']] || row[lowerMap['available bal.']] || row[lowerMap['closing balance*']] || '';
+            const balanceRaw = row[lowerMap['balance']] || row[lowerMap['balance(rs)']] || row[lowerMap['balance(rs.)']] || row[lowerMap['balancer']] || row[lowerMap['available bal.']] || row[lowerMap['closing balance*']] || '';
             const balance = balanceRaw ? cleanAmount(balanceRaw) : '0.00';
 
             // let reference = row[lowerMap['transaction id']] || row[lowerMap['ref no./cheque']] || row[lowerMap['ref/cheque']] || row[lowerMap['cheque no']] || row[lowerMap['cheque no.']] || row[lowerMap['cheque']] || row[lowerMap['chq no']] || row[lowerMap['chq./ref.no.']] || row[lowerMap['chq-no']] || row[lowerMap['id']] || '';
@@ -1457,6 +1481,21 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                 if (!isNaN(parsed)) {
                     return `${dd}/${mm}/${yyyy}`;
                 }
+            }
+
+            // ✅ Match DD-MMM-YY (e.g. 11-Mar-25)
+            if (/^\d{2}-[A-Za-z]{3}-\d{2}$/.test(trimmed)) {
+                const normalized = new Date(trimmed.replace(/-/g, ' ')); // '11 Mar 25'
+                if (!isNaN(normalized)) {
+                    let yyyy = normalized.getFullYear();
+                    if (yyyy < 100) {
+                        yyyy = yyyy < 50 ? 2000 + yyyy : 1900 + yyyy;
+                    }
+                    const dd = String(normalized.getDate()).padStart(2, '0');
+                    const mm = String(normalized.getMonth() + 1).padStart(2, '0');
+                    return `${dd}/${mm}/${yyyy}`;
+                }
+                return null;
             }
 
             // Continue with known formats...
@@ -2718,9 +2757,13 @@ const filterValidGroups = (groupedByY, expectedHeaders) => {
     return validGroups;
 };
 
-const findFirstValidGroupKey = yGroups => {
-    for (const [yKey, group] of Object.entries(yGroups)) {
-        if (group.length < 6) continue;
+const createGroupValidator = ({ useMonthText = false }) => {
+    const dateRegex = useMonthText
+        ? /^\d{1,2}[-\/][A-Za-z]{3}[-\/]\d{2,4}$/
+        : /^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$/;
+
+    return group => {
+        if (!group || group.length < 6) return false;
 
         let dateCount = 0;
         let amountCount = 0;
@@ -2728,21 +2771,20 @@ const findFirstValidGroupKey = yGroups => {
 
         group.forEach(({ text }) => {
             const txt = text.trim();
-            if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$/.test(txt)) dateCount++;
+
+            if (dateRegex.test(txt)) dateCount++;
             else if (/^[₹]?[0-9,]+\.\d{2}$/.test(txt)) amountCount++;
             else if (/\w/.test(txt)) textCount++;
         });
 
-        if (dateCount >= 2 && amountCount >= 2 && textCount >= 2) {
-            return yKey;
-        }
-    }
-
-    return null;
+        return useMonthText
+            ? dateCount >= 1 && amountCount >= 2 && textCount >= 2
+            : dateCount >= 2 && amountCount >= 2 && textCount >= 2;
+    };
 };
 
-const getGroupsFromValidOnward = yGroups => {
-    const validKey = findFirstValidGroupKey(yGroups);
+const getGroupsFromValidOnward = (yGroups, useMonthText = false) => {
+    const validKey = findFirstValidGroupKey(yGroups, useMonthText);
     if (!validKey) return {};
 
     const validY = parseFloat(validKey);
@@ -2756,6 +2798,17 @@ const getGroupsFromValidOnward = yGroups => {
 
     return filtered;
 };
+
+const findFirstValidGroupKey = (yGroups, useMonthText = false) => {
+    const isValidGroup = createGroupValidator({ useMonthText });
+
+    for (const [yKey, group] of Object.entries(yGroups)) {
+        if (isValidGroup(group)) return yKey;
+    }
+
+    return null;
+};
+
 
 const cleanGroupedByYAxis = (groupedByYAxis) => {
     const cleaned = {};
