@@ -75,7 +75,7 @@ exports.handler = async (event, context) => {
             console.log("Mode:", metadata.salemode);
 
             try {
-                const extractedRecords = await processCSV(fileData.Body, metadata.taxtype);
+                const extractedRecords = await processCSV(fileData.Body, metadata.taxtype,metadata.type);
                 metadata.status = 5;
                 await sendMessagesInBatch(extractedRecords, metadata, fileType);
             } catch (error) {
