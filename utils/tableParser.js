@@ -40,6 +40,8 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                     'Debit', 'Credit', 'Balance'],
                 ['Txn Date', 'Value Date', 'Description', 'Ref No./Cheque', 'Code',
                     'Debit', 'Credit', 'Balance'],
+                ['Txn', 'Value', 'Description', 'Ref', 'Branch',
+                    'Debit', 'Credit', 'Balance'],
                 ['Post Date', 'Value Date', 'Description', 'Cheque',
                     'Debit', 'Credit', 'Balance'],
                 ['Date', 'Details', 'Ref No./Cheque',
@@ -96,11 +98,11 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
 
         const headerYForBank = {
             'SBI': [
-                'Txn Date', 'Post Date', 'Date'
+                'Txn Date', 'Post Date', 'Date', 'Txn'
             ]
         };
 
-        const sbifirstHeaders = ['Txn Date', 'Post Date'];//Except Date format
+        const sbifirstHeaders = ['Txn Date', 'Post Date', 'Txn'];//Except Date format
 
         // Bank-specific table end marker logic
         const bankEndMarkers = {
@@ -180,7 +182,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
             // Add more banks as needed
         };
 
-        const banksToExcludeCarryForward = ['UNION BANK OF INDIA', 'CANARA BANK', 'SBI', 'CITY UNION BANK', 'AXIS BANK', 'BANK OF BARODA', 'KARUR VYSYA BANK','INDIAN OVERSEAS BANK']; // add banks as needed
+        const banksToExcludeCarryForward = ['UNION BANK OF INDIA', 'CANARA BANK', 'SBI', 'CITY UNION BANK', 'AXIS BANK', 'BANK OF BARODA', 'KARUR VYSYA BANK', 'INDIAN OVERSEAS BANK']; // add banks as needed
         const banksToIncludeHeadernWithBroughtForwardToExcludeCarryForward = ['INDIAN BANK']; // add banks as needed --> validated
         const banksToIncludeRefineRefNoAndNarration = ['HDFC BANK']; // add banks as needed
         const banksToIncludeRefineTransactionIdAndNarration = ['UNION BANK OF INDIA']; // add banks as needed
@@ -200,7 +202,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
         const banksToIncludeRefineBranchAndParticulars = ['KARUR VYSYA BANK']; // add banks as needed
         const bankToIncludeValidateHeaderWithTransactionId = ['ICICI BANK']; // add banks as needed
         const bankToIncludeValidateHeaderWithTimeStamp = ['UNION BANK OF INDIA']; // add banks as needed
-        const banksToIncludeChangeHeadersXAxisForAmounts = ['UNION BANK OF INDIA','INDIAN OVERSEAS BANK']; // add banks as needed
+        const banksToIncludeChangeHeadersXAxisForAmounts = ['UNION BANK OF INDIA', 'INDIAN OVERSEAS BANK']; // add banks as needed
         const banksToIncludeMergeHeaders = ['CITY UNION BANK', 'ANDHRA PRAGATHI GRAMEENA BANK']; // add banks as needed
         const banksToIncludeMergeHeadersInOnePage = ['ANDHRA PRAGATHI GRAMEENA BANK']; // add banks as needed
         const banksToIncludeParitalMergeHeaders = ['CENTRAL BANK OF INDIA', 'BANK OF BARODA', 'UNION BANK OF INDIA']; // add banks as needed
@@ -766,7 +768,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                                 headerPositionsByPage[page][header] += 2;
                             }
                         });
-                        
+
                         ["Debit(Rs)", "Credit(Rs)"].forEach(header => {
                             if (headerPositionsByPage[page][header] !== undefined) {
                                 headerPositionsByPage[page][header] += 1;
@@ -903,6 +905,14 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                             refineDateAndParticulars(item, columnXMap["Particulars"], columnXMap["Value Date"])
                         );
                     }
+                    if (banksToIncludeHeadernWithEpsilionVarationWithLatestFormat.includes(bankName) && columnXMap["Txn"]) {
+
+                        snappedTableData = enhanceCombineWrappedAmounts(snappedTableData).map(item =>
+                            refineAmountAndBranchCode(item, columnXMap["Branch"], columnXMap["Debit"])
+                        );
+
+                    }
+
                     const mergedDates = combineDateFragments(snappedTableData);
 
                     // console.log(mergedDates);
@@ -1374,6 +1384,59 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
 
             return combined;
         }
+        function enhanceCombineWrappedAmounts(rows) {
+            const combined = [];
+            let skipNext = false;
+
+            for (let i = 0; i < rows.length - 1; i++) {
+                if (skipNext) {
+                    skipNext = false;
+                    continue;
+                }
+
+                const current = rows[i];
+                const next = rows[i + 1];
+                const currentText = current.text.trim();
+                const nextText = next.text.trim();
+
+                const isCloseVertically = Math.abs(current.y - next.y) <= 1.0;
+                const isCloseHorizontally = Math.abs(current.x - next.x) <= 1.5;
+
+                let mergedText = null;
+
+                if (isCloseVertically && isCloseHorizontally) {
+                    if (/^[\d,]+$/.test(currentText) && /^\.\d{1,2}$/.test(nextText)) {
+                        mergedText = `${currentText}${nextText}`;
+                    } else if (/^[\d,]+$/.test(currentText) && /^\d*\.\d{1,2}$/.test(nextText)) {
+                        mergedText = `${currentText}${nextText}`;
+                    } else if (/^\d+\.\d$/.test(currentText) && /^\d$/.test(nextText)) {
+                        mergedText = `${currentText}${nextText}`;
+                    } else if (/^\d+\.$/.test(currentText) && /^\d{2}$/.test(nextText)) {
+                        mergedText = `${currentText}${nextText}`;
+                    } else if (/^[\d,]+\.\d$/.test(currentText) && /^\d$/.test(nextText)) {
+                        mergedText = `${currentText}${nextText}`;
+                    }
+                }
+
+                if (mergedText) {
+                    combined.push({
+                        text: mergedText,
+                        x: current.x,
+                        y: Math.max(current.y, next.y)
+                    });
+                    skipNext = true;
+                } else {
+                    combined.push(current);
+                }
+            }
+
+            if (!skipNext && rows.length > 0) {
+                combined.push(rows[rows.length - 1]);
+            }
+
+            return combined;
+        }
+
 
         function getCarryForwardFragments(headerXMap, parsedRowsOnNextPage) {
             // Find the header key with the smallest x-coordinate
@@ -3372,6 +3435,23 @@ const refineAmountSnappedToBalance = (item, amountX, balanceX) => {
 
     return item;
 };
+
+const refineAmountAndBranchCode = (
+  item,
+  branchCodeX,
+  amountX
+) => {
+  const isStrictAmount = text =>
+    /^[\d,]+\.\d{2}$/.test(text.trim()); // e.g., 1,10,000.00 or 500.50
+
+  if (item.x === amountX && !isStrictAmount(item.text)) {
+    // Mis-snapped narration or non-amount at Amount position
+    return { ...item, x: branchCodeX };
+  }
+
+  return item;
+};
+
 
 
 const refineYAxisOfParticularsWithDate = (
