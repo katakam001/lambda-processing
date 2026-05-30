@@ -7,9 +7,9 @@ aws lambda update-function-configuration --function-name processAnyFileDevLambda
 
 
 compress the existing zip file
-Compress-Archive -Update -Path utils,services,fonts,index.js,.env.development,.env.production -DestinationPath lambda-code.zip
+Compress-Archive -Update -Path config,parsers,utils,services,fonts,index.js,.env.development,.env.production -DestinationPath lambda-code.zip
 
 create a compress archieve using zip.
-Compress-Archive -Path utils,services,fonts,index.js,.env.development,.env.production -DestinationPath lambda-code.zip
+Compress-Archive -Path config,parsers,utils,services,fonts,index.js,.env.development,.env.production -DestinationPath lambda-code.zip
 
-aws lambda update-function-configuration --function-name processAnyFileDevLambda --layers arn:aws:lambda:ap-south-2:867344430886:layer:node-modules-layer:1 arn:aws:lambda:ap-south-2:867344430886:layer:GhostscriptLayer:2
+aws lambda update-function-configuration --function-name processAnyFileDevLambda --layers arn:aws:lambda:ap-south-2:867344430886:layer:node-modules-layer:2 arn:aws:lambda:ap-south-2:867344430886:layer:GhostscriptLayer:3
