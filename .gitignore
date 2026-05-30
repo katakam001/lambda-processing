@@ -3,5 +3,8 @@ lambda-code.zip
 lambda-code_current_prod.zip
 lambda-code_template_changes_finalcode.zip
 ghostscript-layer/ghostscript-layer.zip
+lambda-code_current_dev_code.zip
+lambda-code_current_prod_before_refractor.zip
 .env.*
+deployment
 lambda-layer/*

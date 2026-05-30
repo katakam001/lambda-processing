@@ -2,6 +2,31 @@ const { SQSClient, SendMessageBatchCommand } = require("@aws-sdk/client-sqs");
 
 const sqs = new SQSClient({ region: process.env.AWS_REGION });
 
+/**
+ * Recursively walk row_data and count all tables
+ */
+function countTables(rowData, tableCounts) {
+    for (const [tableName, value] of Object.entries(rowData)) {
+        if (Array.isArray(value)) {
+            // array of child rows
+            tableCounts[tableName] = (tableCounts[tableName] || 0) + value.length;
+
+            // recurse into each child row if it's an object
+            value.forEach(v => {
+                if (typeof v === "object" && v !== null) {
+                    countTables(v, tableCounts);
+                }
+            });
+        } else if (typeof value === "object" && value !== null) {
+            // single parent row object
+            tableCounts[tableName] = (tableCounts[tableName] || 0) + 1;
+
+            // recurse into nested children
+            countTables(value, tableCounts);
+        }
+    }
+}
+
 async function sendMessagesInBatch(records, metadata, fileType) {
     const batchSize = 10;
     let entries = [];
@@ -71,7 +96,68 @@ async function sendMessagesInBatch(records, metadata, fileType) {
         }
 
         // JSON (already tracked separately)
-    } else if (fileType === "json") {
+    } else if (fileType === "json" && metadata.job_id) {
+        const resolvedFileType = metadata.filetype;
+        totalMessages = records.length;
+
+        for (let i = 0; i < records.length; i += batchSize) {
+            const batch = records.slice(i, i + batchSize).map((record, index) => ({
+                Id: `msg-${i + index}`,
+                MessageBody: JSON.stringify(record),
+                MessageAttributes: {
+                    batchId: { DataType: "String", StringValue: metadata.job_id },
+                    stage: { DataType: "String", StringValue: metadata.stage }, // ✅ dynamic
+                    fileType: { DataType: "String", StringValue: resolvedFileType },
+                    userId: { DataType: "String", StringValue: metadata.target_user_id },
+                    financialYear: { DataType: "String", StringValue: metadata.financial_year }
+                }
+
+            }));
+            console.log(batch);
+            entries.push(...batch);
+        }
+
+
+        // inside Lambda after building records[]
+        const tableCounts = {};
+
+        records.forEach(r => {
+            if (r.table_name) {
+                // independent table
+                tableCounts[r.table_name] = (tableCounts[r.table_name] || 0) + 1;
+            } else if (r.table_group) {
+                // group bundle → recurse into row_data
+                countTables(r.row_data, tableCounts);
+            }
+        });
+
+
+        const summaryMessage = {
+            Id: `summary-${Date.now()}`,
+            MessageBody: JSON.stringify({
+                jobId: metadata.job_id,
+                stage: metadata.stage,
+                status: metadata.status, // success
+                chunk_index: metadata.chunk_index,
+                timestamp: new Date().toISOString(),
+                tables: Object.entries(tableCounts).map(([tableName, count]) => ({
+                    tableName,
+                    generatedCount: count
+                }))
+            }),
+            MessageAttributes: {
+                messageType: { DataType: "String", StringValue: "summary" },
+                batchId: { DataType: "String", StringValue: metadata.job_id },
+                stage: { DataType: "String", StringValue: metadata.stage },
+                userId: { DataType: "String", StringValue: metadata.target_user_id },
+                financialYear: { DataType: "String", StringValue: metadata.financial_year },
+                fileType: { DataType: "String", StringValue: resolvedFileType }
+            }
+        };
+        console.log(summaryMessage);
+
+        entries.push(summaryMessage);
+    } else if (fileType === "json" && metadata.exportid) {
         const message = {
             Id: "msg-0",
             MessageBody: JSON.stringify(records[0]),
@@ -111,13 +197,40 @@ async function sendMessagesInBatch(records, metadata, fileType) {
         entries.push(summaryMessage);
     }
 
+    if (fileType !== "json" && (metadata.status === 3)) {
+        const resolvedFileType = metadata.filetype;
+
+        const summaryMessage = {
+            Id: `summary-${Date.now()}`,
+            MessageBody: JSON.stringify({
+                jobId: metadata.job_id,
+                stage: metadata.stage,
+                status: metadata.status,
+                errorMessage: metadata.errorMessage, // optional: include if status === 3
+                chunk_index: metadata.chunk_index,
+                timestamp: new Date().toISOString(),
+                tables: [] // ✅ explicitly empty on failure
+            }),
+            MessageAttributes: {
+                messageType: { DataType: "String", StringValue: "summary" },
+                batchId: { DataType: "String", StringValue: metadata.job_id },
+                stage: { DataType: "String", StringValue: metadata.stage },
+                userId: { DataType: "String", StringValue: metadata.target_user_id },
+                financialYear: { DataType: "String", StringValue: metadata.financial_year },
+                fileType: { DataType: "String", StringValue: resolvedFileType }
+            }
+        };
+
+        entries.push(summaryMessage);
+    }
+
     // 🚀 Send messages to SQS in batches
     try {
         for (let i = 0; i < entries.length; i += batchSize) {
-            await sqs.send(new SendMessageBatchCommand({
-                QueueUrl: process.env.SQS_QUEUE_URL,
-                Entries: entries.slice(i, i + batchSize)
-            }));
+            // await sqs.send(new SendMessageBatchCommand({
+            //     QueueUrl: process.env.SQS_QUEUE_URL,
+            //     Entries: entries.slice(i, i + batchSize)
+            // }));
             console.log(`✅ Sent ${Math.min(batchSize, entries.length - i)} messages`);
         }
     } catch (error) {

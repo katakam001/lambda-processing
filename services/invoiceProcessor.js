@@ -19,8 +19,7 @@ async function processCSV(buffer, selectedTaxType, invoiceType) {
 
                             if (isTCS) {
                                 const amount = parseFloat(row["amount"] || "0");
-                                const taxRate = parseFloat(row["taxRate"] || "0");
-                                const tax = +(amount * taxRate / 100).toFixed(2); // Compute tax
+                                const tax = parseFloat(row["tax"] || "0");
                                 const total_amount = +(amount + tax).toFixed(2); // ✅ Add this
                                 const item = {
                                     itemName: row["itemName"],

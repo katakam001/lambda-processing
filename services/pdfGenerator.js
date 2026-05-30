@@ -368,63 +368,80 @@ function buildTrialBalanceDocDefinition(data) {
         accounts: group.accounts
       });
     } else {
-      // Group Name
-      unifiedBody.push([
-        { text: group.groupName, bold: true, decoration: "underline" },
-        { text: "", alignment: "right" },
-        { text: "", alignment: "right" }
-      ]);
+      const accountRows = [];
 
       group.accounts.forEach(account => {
-        unifiedBody.push([
-          { text: account.accountName, margin: [10, 0, 0, 0] },
-          {
-            text: account.debit
-              ? account.debit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-              : "",
-            alignment: "right"
-          },
-          {
-            text: account.credit
-              ? account.credit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-              : "",
-            alignment: "right"
-          }
-        ]);
+        const hasDebit = account.debit !== 0 && account.debit != null;
+        const hasCredit = account.credit !== 0 && account.credit != null;
+
+        if (hasDebit || hasCredit) {
+          accountRows.push([
+            { text: account.accountName, margin: [10, 0, 0, 0] },
+            {
+              text: hasDebit
+                ? account.debit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                : "",
+              alignment: "right"
+            },
+            {
+              text: hasCredit
+                ? account.credit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                : "",
+              alignment: "right"
+            }
+          ]);
+        }
       });
 
-      // Group Total
+      if (accountRows.length > 0) {
+        unifiedBody.push([
+          { text: group.groupName, bold: true, decoration: "underline" },
+          { text: "", alignment: "right" },
+          { text: "", alignment: "right" }
+        ]);
 
-      unifiedBody.push([
-        { text: "Group Total", bold: true, margin: [10, 0, 0, 0] },
-        {
-          text: groupDebitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-          alignment: "right",
-          bold: true
-        },
-        {
-          text: groupCreditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-          alignment: "right",
-          bold: true
-        }
-      ]);
+        unifiedBody.push(...accountRows);
+
+        unifiedBody.push([
+          { text: "Group Total", bold: true, margin: [10, 0, 0, 0] },
+          {
+            text: groupDebitTotal !== 0
+              ? groupDebitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+              : "",
+            alignment: "right",
+            bold: true
+          },
+          {
+            text: groupCreditTotal !== 0
+              ? groupCreditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+              : "",
+            alignment: "right",
+            bold: true
+          }
+        ]);
+      }
     }
   });
 
   // 📋 High-Volume Summary Section
   if (highVolumeSummaries.length > 0) {
-
     highVolumeSummaries.forEach(summary => {
+      const hasDebit = summary.debitTotal !== 0 && summary.debitTotal != null;
+      const hasCredit = summary.creditTotal !== 0 && summary.creditTotal != null;
 
       unifiedBody.push([
         { text: summary.groupName },
         {
-          text: summary.debitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+          text: hasDebit
+            ? summary.debitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            : "",
           alignment: "right",
           bold: true
         },
         {
-          text: summary.creditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+          text: hasCredit
+            ? summary.creditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            : "",
           alignment: "right",
           bold: true
         }
@@ -474,56 +491,77 @@ function buildTrialBalanceDocDefinition(data) {
         { text: "Credit Amount", style: "tableHeader" }
       ]
     ];
+    const accountRows = [];
 
     summary.accounts.forEach(account => {
+      const hasDebit = account.debit !== 0 && account.debit != null;
+      const hasCredit = account.credit !== 0 && account.credit != null;
+
+      if (hasDebit || hasCredit) {
+        accountRows.push([
+          { text: account.accountName },
+          {
+            text: hasDebit
+              ? account.debit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+              : "",
+            alignment: "right"
+          },
+          {
+            text: hasCredit
+              ? account.credit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+              : "",
+            alignment: "right"
+          }
+        ]);
+      }
+    });
+
+    // Only proceed if there are valid account rows
+    if (accountRows.length > 0) {
+      body.push(...accountRows);
+
       body.push([
-        { text: account.accountName },
+        { text: "Total", bold: true },
         {
-          text: account.debit
-            ? account.debit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          text: summary.debitTotal !== 0
+            ? summary.debitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
             : "",
-          alignment: "right"
+          alignment: "right",
+          bold: true
         },
         {
-          text: account.credit
-            ? account.credit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          text: summary.creditTotal !== 0
+            ? summary.creditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
             : "",
-          alignment: "right"
+          alignment: "right",
+          bold: true
         }
       ]);
-    });
 
-    body.push([
-      { text: "Total", bold: true },
-      {
-        text: summary.debitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-        alignment: "right",
-        bold: true
-      },
-      {
-        text: summary.creditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-        alignment: "right",
-        bold: true
-      }
-    ]);
-    content.push({ text: summary.groupName, style: "groupHeader", decoration: "underline", margin: [0, 10, 0, 4] });
+      content.push({
+        text: summary.groupName,
+        style: "groupHeader",
+        decoration: "underline",
+        margin: [0, 10, 0, 4]
+      });
 
-    content.push({
-      table: {
-        headerRows: 1,
-        widths: ['*', 100, 100],
-        body
-      },
-      layout: {
-        hLineWidth: () => 0.5,
-        vLineWidth: () => 0.5,
-        paddingLeft: () => 2,
-        paddingRight: () => 2,
-        paddingTop: () => 1,
-        paddingBottom: () => 1
-      },
-      margin: [0, 0, 0, 10]
-    });
+      content.push({
+        table: {
+          headerRows: 1,
+          widths: ['*', 100, 100],
+          body
+        },
+        layout: {
+          hLineWidth: () => 0.5,
+          vLineWidth: () => 0.5,
+          paddingLeft: () => 2,
+          paddingRight: () => 2,
+          paddingTop: () => 1,
+          paddingBottom: () => 1
+        },
+        margin: [0, 0, 0, 10]
+      });
+    }
   });
 
   return {
@@ -555,6 +593,178 @@ function buildTrialBalanceDocDefinition(data) {
   };
 }
 
+function buildTradingAccountOrPAndLDocDefinition(data) {
+  const content = [];
+
+  // 🏢 Header
+  content.push(
+    { text: `${data.companyName}, ${data.cityName}`, style: "companyHeader" },
+    { text: "", margin: [0, 4] },
+    { text: data.reportTitle, style: "reportTitle" },
+    { text: `For the year ending ${formatDate(data.reportDate)}`, style: "infoHeader" },
+    { text: "", margin: [0, 6] }
+  );
+
+  const debitRowCount = countGroupRows(data.debitGroups);
+  const creditRowCount = countGroupRows(data.creditGroups);
+  const maxRowCount = Math.max(debitRowCount, creditRowCount);
+
+  // 🔄 Render both sides
+  // 🔄 Render both sides side-by-side
+  content.push({
+    columns: [
+      {
+        width: '48%',
+        stack: renderTradingSide(data.debitGroups, {
+          showHeader: true,
+          showSummary: data.grossResult.label === 'Gross Profit' || data.grossResult.label === 'Net Profit',
+          summaryLabel: data.grossResult.label,
+          summaryValue: data.grossResult.amount,
+          totalQuantity: data.debitTotalQuantity,
+          totalAmount: data.debitTotalAmount
+        }, maxRowCount)
+      },
+      {
+        width: '48%',
+        stack: renderTradingSide(data.creditGroups, {
+          showHeader: true,
+          showSummary: data.grossResult.label === 'Gross Loss' || data.grossResult.label === 'Net Loss',
+          summaryLabel: data.grossResult.label,
+          summaryValue: data.grossResult.amount,
+          totalQuantity: data.creditTotalQuantity,
+          totalAmount: data.creditTotalAmount
+        }, maxRowCount)
+      }
+    ],
+    columnGap: 12
+  });
+
+  return {
+    pageSize: "A4",
+    pageOrientation: "landscape",
+    pageMargins: [15, 25, 15, 25],  // Previously [20, 30, 20, 30]
+    content,
+    styles: {
+      companyHeader: { fontSize: 14, bold: true, alignment: "center" },
+      reportTitle: { fontSize: 12, bold: true, alignment: "center", margin: [0, 0, 0, 10] },
+      infoHeader: { fontSize: 9, alignment: "center", margin: [0, 2] },
+      tableHeader: { fillColor: "#f2f2f2", bold: true, alignment: "center", fontSize: 8 },
+      summaryProfit: {
+        fillColor: "#e6ffe6",
+        bold: true,
+        fontSize: 8
+      },
+      summaryLoss: {
+        fillColor: "#ffe6e6",
+        bold: true,
+        fontSize: 8
+      }
+    },
+    header: (currentPage, pageCount) => ({
+      text: `Page ${currentPage} of ${pageCount}`,
+      alignment: "right",
+      fontSize: 8,
+      margin: [0, 10, 20, 0]
+    }),
+    watermark: {
+      text: "TAXSERVICE4U",
+      color: "gray",
+      opacity: 0.1,
+      bold: true,
+      italics: false
+    }
+  };
+}
+
+function renderReportSection(data, { showTableHeader = true } = {}) {
+  const section = [];
+
+  const debitRowCount = countGroupRows(data.debitGroups);
+  const creditRowCount = countGroupRows(data.creditGroups);
+  const maxRowCount = Math.max(debitRowCount, creditRowCount);
+
+  section.push({
+    columns: [
+      {
+        width: '48%',
+        stack: renderTradingSide(data.debitGroups, {
+          showHeader: showTableHeader,
+          showSummary: data.grossResult.label === 'Gross Profit' || data.grossResult.label === 'Net Profit',
+          summaryLabel: data.grossResult.label,
+          summaryValue: data.grossResult.amount,
+          totalQuantity: data.debitTotalQuantity,
+          totalAmount: data.debitTotalAmount
+        }, maxRowCount)
+      },
+      {
+        width: '48%',
+        stack: renderTradingSide(data.creditGroups, {
+          showHeader: showTableHeader,
+          showSummary: data.grossResult.label === 'Gross Loss' || data.grossResult.label === 'Net Loss',
+          summaryLabel: data.grossResult.label,
+          summaryValue: data.grossResult.amount,
+          totalQuantity: data.creditTotalQuantity,
+          totalAmount: data.creditTotalAmount
+        }, maxRowCount)
+      }
+    ],
+    columnGap: 12
+  });
+
+  return section;
+}
+
+function buildCombinedTradingAndPAndLDocDefinition(data) {
+  const content = [];
+
+  // 🔹 Shared Header (only once)
+  content.push(
+    { text: `${data.companyName}, ${data.cityName}`, style: "companyHeader" },
+    { text: "", margin: [0, 4] },
+    { text: data.reportTitle, style: "reportTitle" },
+    { text: `For the year ending ${formatDate(data.reportDate)}`, style: "infoHeader" },
+    { text: "", margin: [0, 6] }
+  );
+
+  // 🔹 Trading Account Section
+  content.push(...renderReportSection(data.trading, { showTableHeader: true }));
+
+  // 🔹 Page Break
+  content.push({ text: "", pageBreak: "before" });
+
+  // 🔹 Profit and Loss Section (no header, no table header)
+  content.push(...renderReportSection(data.profitAndLoss, { showTableHeader: false }));
+
+  return {
+    pageSize: "A4",
+    pageOrientation: "landscape",
+    pageMargins: [15, 25, 15, 25],
+    content,
+    styles: {
+      companyHeader: { fontSize: 14, bold: true, alignment: "center" },
+      reportTitle: { fontSize: 12, bold: true, alignment: "center", margin: [0, 0, 0, 10] },
+      infoHeader: { fontSize: 9, alignment: "center", margin: [0, 2] },
+      tableHeader: { fillColor: "#f2f2f2", bold: true, alignment: "center", fontSize: 8 },
+      summaryProfit: { fillColor: "#e6ffe6", bold: true, fontSize: 8 },
+      summaryLoss: { fillColor: "#ffe6e6", bold: true, fontSize: 8 }
+    },
+    header: (currentPage, pageCount) => ({
+      text: `Page ${currentPage} of ${pageCount}`,
+      alignment: "right",
+      fontSize: 8,
+      margin: [0, 10, 20, 0]
+    }),
+    watermark: {
+      text: "TAXSERVICE4U",
+      color: "gray",
+      opacity: 0.1,
+      bold: true,
+      italics: false
+    }
+  };
+}
+
+
 // 📅 Date formatter
 function formatDate(date) {
   const d = new Date(date);
@@ -563,6 +773,129 @@ function formatDate(date) {
     month: "2-digit",
     year: "numeric"
   });
+}
+
+function getBlankRows(count) {
+  const rows = [];
+  for (let i = 0; i < count; i++) {
+    rows.push([
+      {
+        text: "\u00A0",
+        colSpan: 4,
+        fontSize: 8,
+        border: [true, true, true, false],
+        color: "white"
+      },
+      { text: "\u00A0", fontSize: 8 },
+      { text: "\u00A0", fontSize: 8 },
+      { text: "\u00A0", fontSize: 8 }
+    ]);
+  }
+  return rows;
+}
+
+
+function countGroupRows(groups) {
+  return groups.reduce((count, group) => count + group.items.length, 0);
+}
+
+function renderTradingSide(groups, { showHeader, showSummary, summaryLabel, summaryValue, totalQuantity, totalAmount }, maxRowCount) {
+  const body = [];
+
+  if (showHeader) {
+    body.push([
+      { text: "Particulars", style: "tableHeader" },
+      { text: "Item", style: "tableHeader" },
+      { text: "Quantity", style: "tableHeader" },
+      { text: "Amount (₹)", style: "tableHeader" }
+    ]);
+  }
+
+  groups.forEach(group => {
+    group.items.forEach((item, i) => {
+      const isStructured = group.groupMode === 'structured';
+      const showGroupLabel = isStructured && i === 0;
+
+      body.push([
+        { text: showGroupLabel ? group.group : isStructured ? "\u00A0" : item.label, fontSize: 8, noWrap: true },
+        { text: isStructured ? item.label : "\u00A0", fontSize: 8, noWrap: true },
+        {
+          text: item.quantity != null
+            ? Number(item.quantity).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            : "\u00A0", fontSize: 8,
+          alignment: "right"
+        },
+        {
+          text: item.amount != null
+            ? Number(item.amount).toLocaleString('en-IN', { minimumFractionDigits: 2,maximumFractionDigits: 2 })
+            : "\u00A0", fontSize: 8,
+          alignment: "right"
+        }
+      ]);
+    });
+  });
+
+  const currentRowCount = body.length - 1;
+  const paddingNeeded = maxRowCount - currentRowCount;
+
+  if (paddingNeeded > 0) {
+    body.push(...getBlankRows(paddingNeeded));
+  }
+
+  // Summary Row
+  if (showSummary) {
+    const summaryStyle = summaryLabel.toLowerCase().includes("loss")
+      ? "summaryLoss"
+      : "summaryProfit";
+
+
+    body.push([
+      { text: summaryLabel, colSpan: 3, style: summaryStyle },
+      { text: "\u00A0", style: summaryStyle },
+      { text: "\u00A0", style: summaryStyle },
+      {
+        text: summaryValue.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+        alignment: "right",
+        style: summaryStyle
+      }
+    ]);
+  } else {
+    body.push([{ text: "\u00A0", colSpan: 4, fontSize: 8 }, { text: "\u00A0", fontSize: 8 }, { text: "\u00A0", fontSize: 8 }, { text: "\u00A0", fontSize: 8 }]);
+  }
+
+  // Totals Row
+  body.push([
+    { text: "\u00A0", colSpan: 2, fontSize: 8 }, { text: "\u00A0", fontSize: 8 },
+    {
+      text: totalQuantity.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+      alignment: "right",
+      bold: true,
+      fontSize: 8
+    },
+    {
+      text: totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+      alignment: "right",
+      bold: true,
+      fontSize: 8
+    }
+  ]);
+
+  return [{
+    table: {
+      headerRows: showHeader ? 1 : 0,
+      widths: [100, 150, 55, 70],
+      body
+    },
+    layout: {
+      hLineWidth: () => 0.5,
+      vLineWidth: () => 0.5,
+      paddingLeft: () => 1,
+      paddingRight: () => 1,
+      paddingTop: () => 2,
+      paddingBottom: () => 2
+    },
+    margin: [0, 0, 0, 10]
+  }];
 }
 
 // Generate PDF and write to /tmp
@@ -577,6 +910,10 @@ async function generatePDFToFile(data, fileType, fileName) {
     docDefinition = buildLedgerDocDefinition(data);
   } else if (fileType === "trailBalanceExport") {
     docDefinition = buildTrialBalanceDocDefinition(data);
+  } else if (fileType === "tradingAccount" || fileType === "profitAndLoss") {
+    docDefinition = buildTradingAccountOrPAndLDocDefinition(data);
+  } else if (fileType === "tradingAccountProfitAndLoss") {
+    docDefinition = buildCombinedTradingAndPAndLDocDefinition(data);
   } else {
     throw new Error(`Unsupported file type: ${fileType}`);
   }
