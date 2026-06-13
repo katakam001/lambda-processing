@@ -15,7 +15,7 @@ function normalizeTransactionRow(row, accountId, userId, financialYear) {
     const keys = Object.keys(row);
     const lowerMap = Object.fromEntries(keys.map(k => [k.toLowerCase(), k]));
 
-    const rawDate = row[lowerMap['date']] || row[lowerMap['txn date']] || row[lowerMap['value date']] || row[lowerMap['transaction']] || row[lowerMap['value']] || row[lowerMap['trans date and']] || row[lowerMap['tran date']] || row[lowerMap['tran']] || row[lowerMap['tran. date']] || row[lowerMap['date(value']] || '';
+    const rawDate = row[lowerMap['date']] || row[lowerMap['txn date']] || row[lowerMap['post date']] || row[lowerMap['value date']] || row[lowerMap['transaction']] || row[lowerMap['value']] || row[lowerMap['trans date and']] || row[lowerMap['tran date']] || row[lowerMap['tran']] || row[lowerMap['tran. date']] || row[lowerMap['date(value']] || '';
     const formattedDate = standardizeDate(rawDate);
     // console.log(rawDate, formattedDate);
 

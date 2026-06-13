@@ -94,20 +94,20 @@ const refineDateAndParticulars = (
 };
 
 const refineValueDateAndParticulars = (
-  item,
-  ParticularsX,
-  dateX
+    item,
+    ParticularsX,
+    dateX
 ) => {
-  // ✅ Accept both DD/MM/YY and DD/MM/YYYY
-  const isValidDate = text =>
-    /^(\d{2}\/\d{2}\/\d{2}|\d{2}\/\d{2}\/\d{4})$/.test(text.trim());
+    // ✅ Accept both DD/MM/YY and DD/MM/YYYY
+    const isValidDate = text =>
+        /^(\d{2}\/\d{2}\/\d{2}|\d{2}\/\d{2}\/\d{4}|\d{2}-\d{2}-\d{4})$/.test(text.trim());
 
-  if (item.x === dateX && !isValidDate(item.text)) {
-    // Mis-snapped narration or non-date at Date position
-    return { ...item, x: ParticularsX };
-  }
+    if (item.x === dateX && !isValidDate(item.text)) {
+        // Mis-snapped narration or non-date at Date position
+        return { ...item, x: ParticularsX };
+    }
 
-  return item;
+    return item;
 };
 
 const refineValueDateWithHypenAndParticulars = (

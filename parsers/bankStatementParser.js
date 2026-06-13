@@ -563,7 +563,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                     // Convert to JSON
                     // console.log(`Page ${page} Table Data:`, tableJSON);
                     combinedTableData[page] = normalizeBankPDF(tableJSON, accountId, userId, financialYear);
-                    console.log(combinedTableData[page]);
+                    // console.log(combinedTableData[page]);
                 });
                 resolve(combinedTableData);
             } else if (item.page) {

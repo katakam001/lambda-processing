@@ -227,10 +227,10 @@ async function sendMessagesInBatch(records, metadata, fileType) {
     // 🚀 Send messages to SQS in batches
     try {
         for (let i = 0; i < entries.length; i += batchSize) {
-            // await sqs.send(new SendMessageBatchCommand({
-            //     QueueUrl: process.env.SQS_QUEUE_URL,
-            //     Entries: entries.slice(i, i + batchSize)
-            // }));
+            await sqs.send(new SendMessageBatchCommand({
+                QueueUrl: process.env.SQS_QUEUE_URL,
+                Entries: entries.slice(i, i + batchSize)
+            }));
             console.log(`✅ Sent ${Math.min(batchSize, entries.length - i)} messages`);
         }
     } catch (error) {
