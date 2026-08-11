@@ -265,6 +265,20 @@ const combineDateFragments = (rows) => {
     return combined;
 };
 
+// 🔹 Helper to clean up date formatting
+const formatDateText = (text) =>
+    text.trim().replace(/-\s+(\d{4})$/, "-$1");
+
+// 🔹 Wrapper to apply formatting only for dates
+const formatCombinedRows = (combinedRows) =>
+    combinedRows.map(r => {
+        let text = r.text;
+        // Apply formatting only if it looks like a date with a year
+        if (/(\d{1,2}-[A-Za-z]{3}-\s+\d{4})/.test(text)) {
+            text = formatDateText(text);
+        }
+        return { ...r, text };
+    });
 
 const isHorizontalLine = (text) => {
     // Must contain at least 10 hypens, spaces allowed
@@ -272,4 +286,4 @@ const isHorizontalLine = (text) => {
     return pattern.test(text);
 };
 
-module.exports = { groupItemsByY, groupItemsByYLegacy, filterGroupedByY, mergeGroupedText, combineMultiLineRows, combineYAxisSameMultiLineRows, mergeNarrationLines, cleanGroupedByYAxis, combineDateFragments, isHorizontalLine, groupRowsByY };
+module.exports = { groupItemsByY, groupItemsByYLegacy, filterGroupedByY, mergeGroupedText, combineMultiLineRows, combineYAxisSameMultiLineRows, mergeNarrationLines, cleanGroupedByYAxis, combineDateFragments, isHorizontalLine, groupRowsByY, formatCombinedRows };

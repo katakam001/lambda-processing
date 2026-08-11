@@ -563,7 +563,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                     // Convert to JSON
                     // console.log(`Page ${page} Table Data:`, tableJSON);
                     combinedTableData[page] = normalizeBankPDF(tableJSON, accountId, userId, financialYear);
-                    // console.log(combinedTableData[page]);
+                    console.log(combinedTableData[page]);
                 });
                 resolve(combinedTableData);
             } else if (item.page) {
@@ -630,6 +630,9 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                 }
                 if (bankConfig.banksToIncludeHeadersInMultipleLines.includes(bankName)) {
                     epsilon = 0.675;
+                    if (detectedHeaders.has("S.no")) {
+                        epsilon = 0.845;
+                    }
                 }
                 if (bankConfig.banksToIncludeHeadernWithEpsilionVaration.includes(bankName)) {
                     epsilon = 0.3;
@@ -707,7 +710,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                     if (headerSet.includes(decodedText.trim())) {
                         // console.log(headerSet);
                         // console.log(decodedText.trim());
-                        if (bankConfig.banksToIncludeHeadernWithEpsilionVarationWithLatestFormat.includes(bankName) && !isFirstHeaderDetected && headerY && (bankConfig.headerYForBank[bankName].includes(decodedText.trim()))) {
+                        if ((bankConfig.banksToIncludeHeadernWithEpsilionVarationWithLatestFormat.includes(bankName) || bankConfig.banksToIncludeHeadersInMultipleLines.includes(bankName)) && !isFirstHeaderDetected && headerY && (bankConfig.headerYForBank[bankName].includes(decodedText.trim()))) {
                             headerY = null;
                             detectedHeaders.clear();
                             headerPositionsByPage[currentPage] = {};

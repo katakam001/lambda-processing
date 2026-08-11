@@ -2,6 +2,7 @@ const { groupItemsByYLegacy } = require('../lineUtils');
 const { findTransactionIdRowGroup } = require('./filters');
 const { injectFallbackTable } = require('../tableUtils');
 const { combineMultiLineRows } = require('../lineUtils');
+const { formatCombinedRows } = require('../lineUtils');
 const { combineWrappedAmounts } = require('../balanceUtils');
 
 /**
@@ -23,9 +24,10 @@ function validateHeaderWithTransactionId(
         rawItemsByPage[page] = tableDataByPage[page];
     }
 
-    // Step 2: Merge rows and amounts
+    // Step 2: Merge rows and amounts and fix the Dates.
     const mergedXAxisRows = combineMultiLineRows(rawItemsByPage[page]);
-    const mergeWrappedAmount = combineWrappedAmounts(mergedXAxisRows);
+    const formattedRows = formatCombinedRows(mergedXAxisRows);
+    const mergeWrappedAmount = combineWrappedAmounts(formattedRows);
 
     // Step 3: Group by Y-axis
     const yGroups = groupItemsByYLegacy(mergeWrappedAmount);

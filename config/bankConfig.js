@@ -100,6 +100,7 @@ const bankConfig = {
         'ICICI BANK': [
             ["Sl", "Id", "Value", "Transaction", "Posted", "Cheque no /", "Remarks", "Withdra", "Deposit", "Balance"],
             ["Sr", "ID", "Value", "Transaction", "Cheque", "Remarks", "Withdrawl", "Deposit", "Balance"],
+            ["S.no", "ID", "date", "Cheque No", "Description", "Withdrawal", "Deposit", "Available"],
             ["Date", "Particulars", "Chq.No.", "Withdrawals", "Deposits", "Autosweep", "Balance(INR)"],
             ["DATE", "MODE**", "PARTICULARS", "DEPOSITS", "WITHDRAWALS", "BALANCE"]
         ],
@@ -194,6 +195,8 @@ const bankConfig = {
             /Page\s+\d+\s+of/i,
             'Page Total',
             'Page Total:',
+            'Generated on :',
+            '*This is a system-generated statement. Hence, it does not require any signature.',
             'TOTAL'
         ],
         'BANK OF INDIA': [
@@ -240,6 +243,9 @@ const bankConfig = {
     headerYForBank: {
         'SBI': [
             'Txn Date', 'Post Date', 'Date', 'Txn'
+        ],
+        'ICICI BANK': [
+            'Sl', 'Sr', 'S.no', 'Date', "DATE"
         ]
     },
     sbifirstHeaders: ['Txn Date', 'Post Date', 'Txn', 'Balance'],//Except Date format
@@ -256,6 +262,11 @@ const bankConfig = {
             ],
             [
                 ["Post Date", "Value", "Details", "Chq.No.", "Debit", "Credit", "Balance"], ["Date"]
+            ]
+        ],
+        'ICICI BANK': [
+            [
+                ["S.no", "ID", "date", "Cheque No", "Description", "Withdrawal", "Deposit", "Available"], ["Transaction", "Balance"]
             ]
         ]
     }, bankExclusivePairs: {

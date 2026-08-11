@@ -7,25 +7,33 @@ const sqs = new SQSClient({ region: process.env.AWS_REGION });
  */
 function countTables(rowData, tableCounts) {
     for (const [tableName, value] of Object.entries(rowData)) {
-        if (Array.isArray(value)) {
-            // array of child rows
-            tableCounts[tableName] = (tableCounts[tableName] || 0) + value.length;
+        // 🚫 skip wrapper key
+        if (tableName === "cash_sales") {
+            // still recurse into its children
+            if (Array.isArray(value)) {
+                value.forEach(v => {
+                    if (typeof v === "object" && v !== null) {
+                        countTables(v, tableCounts);
+                    }
+                });
+            }
+            continue;
+        }
 
-            // recurse into each child row if it's an object
+        if (Array.isArray(value)) {
+            tableCounts[tableName] = (tableCounts[tableName] || 0) + value.length;
             value.forEach(v => {
                 if (typeof v === "object" && v !== null) {
                     countTables(v, tableCounts);
                 }
             });
         } else if (typeof value === "object" && value !== null) {
-            // single parent row object
             tableCounts[tableName] = (tableCounts[tableName] || 0) + 1;
-
-            // recurse into nested children
             countTables(value, tableCounts);
         }
     }
 }
+
 
 async function sendMessagesInBatch(records, metadata, fileType) {
     const batchSize = 10;
