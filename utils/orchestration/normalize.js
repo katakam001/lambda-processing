@@ -1,5 +1,34 @@
 const crypto = require('crypto');
 
+// 🔹 Reference assigner closure
+function createReferenceAssigner() {
+    let currentDate = null;
+    let refMap = {};
+    console.log("invoked multiple times");
+
+    function assignReference(baseRef, formattedDate) {
+        // Reset map if the date changes
+        if (currentDate !== formattedDate) {
+            currentDate = formattedDate;
+            refMap = {};
+        }
+
+        if (refMap[baseRef] === undefined) {
+            refMap[baseRef] = 0;
+            // console.log("First occurrence:", baseRef);
+            return baseRef; // first occurrence
+        } else {
+            refMap[baseRef]++;
+            // console.log("Duplicate occurrence:", baseRef, "->", `${baseRef}-${refMap[baseRef]}`);
+            return `${baseRef}-${refMap[baseRef]}`; // subsequent duplicates
+        }
+    }
+
+    return { assignReference };
+}
+
+// 🔹 Initialize once per PDF run
+const { assignReference } = createReferenceAssigner();
 
 const normalizeBankPDF = (pageRows, accountId, userId, financialYear) => {
     const normalized = [];
@@ -38,7 +67,10 @@ function normalizeTransactionRow(row, accountId, userId, financialYear) {
     const finalAmount = finalDebit !== '0.00' ? finalDebit : finalCredit;
     const fingerprint = `${formattedDate}|${description.trim()}|${finalAmount}`;
     const scopedInput = `${accountId}|${userId}|${financialYear}|${fingerprint}`;
-    const reference = generateReference(scopedInput);
+
+    const baseRef = generateReference(scopedInput); // raw hash
+    const reference = assignReference(baseRef, formattedDate); // duplicate-aware
+
 
     return {
         date: formattedDate,
