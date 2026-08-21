@@ -58,6 +58,7 @@ async function processStageBundle(fileData, metadata, s3Key) {
           source_id: parentRow.id,
           s3_key: s3Key,
           chunk_index: metadata.chunk_index,
+          is_backup: metadata.is_backup === "true",
           row_data: rowData
         });
       }
@@ -79,6 +80,7 @@ async function processStageBundle(fileData, metadata, s3Key) {
         source_id: row.id,
         s3_key: s3Key,
         chunk_index: metadata.chunk_index,
+        is_backup: metadata.is_backup === "true",
         row_data: stripMeta(row, metadata.target_user_id, tableName, null, meta)
       });
     }
