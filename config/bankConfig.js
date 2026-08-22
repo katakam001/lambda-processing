@@ -122,7 +122,8 @@ const bankConfig = {
         ],
         'CENTRAL BANK OF INDIA': [
             ["Value", "Post", "Details", "Chq.No.", "Debit", "Credit", "Balance"],
-            ["Post Date", "Value", "Branch", "Cheque", "Account Description", "Debit", "Credit", "Balance"]
+            ["Post Date", "Value", "Branch", "Cheque", "Account Description", "Debit", "Credit", "Balance"],
+            ["Post Date", "Value", "Branch", "Cheque", "Transaction Description", "Debit", "Credit", "Balance"]
         ],
         'ANDHRA PRAGATHI GRAMEENA BANK': [
             ["Post Date", "Value Date", "Details", "Chq no", "Debit", "Credit", "Balance"],

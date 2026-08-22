@@ -128,6 +128,8 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                 if (alignments["Balance"] && isParitalHeader && bankConfig.banksToIncludeParitalMergeHeaders.includes(bankName)) {
                     if (alignments["Serial"] && bankConfig.banksToIncludeParitalMergeHeadersWithoutParitalHeaders.includes(bankName))
                         isParitalHeader = false;
+                    if ((alignments["Account Description"] || alignments["Transaction Description"]) && bankConfig.banksToIncludeRefineChequeAndAccountDescription.includes(bankName))
+                        isParitalHeader = false;
                     if ((alignments["Branch"] || alignments["BRANCH"] || alignments["Deposits"]) && bankConfig.banksToIncludeMergeHeadersInOnePageMultipleTimes.includes(bankName))
                         isParitalHeader = false;
                 }
@@ -305,10 +307,17 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                         );
                     }
 
-                    if (bankConfig.banksToIncludeRefineChequeAndAccountDescription.includes(bankName)) {
+                    if (bankConfig.banksToIncludeRefineChequeAndAccountDescription.includes(bankName) && columnXMap["Account Description"]) {
 
                         snappedTableData = snappedTableData.map(item =>
                             refineChequeAndNarration(item, columnXMap["Account Description"], columnXMap["Cheque"])
+                        );
+                    }
+
+                    if (bankConfig.banksToIncludeRefineChequeAndAccountDescription.includes(bankName) && columnXMap["Transaction Description"]) {
+
+                        snappedTableData = snappedTableData.map(item =>
+                            refineChequeAndNarration(item, columnXMap["Transaction Description"], columnXMap["Cheque"])
                         );
                     }
 
@@ -563,7 +572,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                     // Convert to JSON
                     // console.log(`Page ${page} Table Data:`, tableJSON);
                     combinedTableData[page] = normalizeBankPDF(tableJSON, accountId, userId, financialYear);
-                    console.log(combinedTableData[page]);
+                    // console.log(combinedTableData[page]);
                 });
                 resolve(combinedTableData);
             } else if (item.page) {

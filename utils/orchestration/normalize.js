@@ -62,7 +62,7 @@ function normalizeTransactionRow(row, accountId, userId, financialYear) {
 
     // let reference = row[lowerMap['transaction id']] || row[lowerMap['ref no./cheque']] || row[lowerMap['ref/cheque']] || row[lowerMap['cheque no']] || row[lowerMap['cheque no.']] || row[lowerMap['cheque']] || row[lowerMap['chq no']] || row[lowerMap['chq./ref.no.']] || row[lowerMap['chq-no']] || row[lowerMap['id']] || '';
 
-    const description = row[lowerMap['remarks']] || row[lowerMap['description']] || row[lowerMap['narration']] || row[lowerMap['particulars']] || row[lowerMap['transaction details']] || row[lowerMap['details']] || row[lowerMap['account description']] || row[lowerMap['tran. particulars']] || '';
+    const description = row[lowerMap['remarks']] || row[lowerMap['description']] || row[lowerMap['narration']] || row[lowerMap['particulars']] || row[lowerMap['transaction details']] || row[lowerMap['details']] || row[lowerMap['account description']] || row[lowerMap['transaction description']] || row[lowerMap['tran. particulars']] || '';
 
     const finalAmount = finalDebit !== '0.00' ? finalDebit : finalCredit;
     const fingerprint = `${formattedDate}|${description.trim()}|${finalAmount}`;
