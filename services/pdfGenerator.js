@@ -764,6 +764,71 @@ function buildCombinedTradingAndPAndLDocDefinition(data) {
   };
 }
 
+function buildBalanceSheetDocDefinition(data) {
+  const content = [];
+
+  // 🏢 Header
+  content.push(
+    { text: `${data.companyName}, ${data.cityName}`, style: "companyHeader" },
+    { text: "", margin: [0, 4] },
+    { text: data.reportTitle, style: "reportTitle" },
+    { text: `For the year ending ${formatDate(data.reportDate)}`, style: "infoHeader" },
+    { text: "", margin: [0, 6] }
+  );
+
+  const leftRowCount = data.leftGroups.length;
+  const rightRowCount = data.rightGroups.length;
+  const maxRowCount = Math.max(leftRowCount, rightRowCount);
+
+  // 🔄 Render both sides side-by-side
+  content.push({
+    columns: [
+      {
+        width: '48%',
+        stack: renderBalanceSide(data.leftGroups, {
+          headerLabel: "Liabilities",
+          totalValue: data.leftTotal
+        }, maxRowCount)
+      },
+      {
+        width: '48%',
+        stack: renderBalanceSide(data.rightGroups, {
+          headerLabel: "Assets",
+          totalValue: data.rightTotal
+        }, maxRowCount)
+      }
+    ],
+    columnGap: 12
+  });
+
+  return {
+    pageSize: "A4",
+    pageOrientation: "landscape",
+    pageMargins: [15, 25, 15, 25],
+    content,
+    styles: {
+      companyHeader: { fontSize: 14, bold: true, alignment: "center" },
+      reportTitle: { fontSize: 12, bold: true, alignment: "center", margin: [0, 0, 0, 10] },
+      infoHeader: { fontSize: 9, alignment: "center", margin: [0, 2] },
+      tableHeader: { fillColor: "#f2f2f2", bold: true, alignment: "center", fontSize: 8 },
+      totalRow: { bold: true, fontSize: 8 }
+    },
+    header: (currentPage, pageCount) => ({
+      text: `Page ${currentPage} of ${pageCount}`,
+      alignment: "right",
+      fontSize: 8,
+      margin: [0, 10, 20, 0]
+    }),
+    watermark: {
+      text: "TAXSERVICE4U",
+      color: "gray",
+      opacity: 0.1,
+      bold: true,
+      italics: false
+    }
+  };
+}
+
 
 // 📅 Date formatter
 function formatDate(date) {
@@ -789,6 +854,24 @@ function getBlankRows(count) {
       { text: "\u00A0", fontSize: 8 },
       { text: "\u00A0", fontSize: 8 },
       { text: "\u00A0", fontSize: 8 }
+    ]);
+  }
+  return rows;
+}
+
+function getBlankRowsForBalanceSheet(count) {
+  const rows = [];
+  for (let i = 0; i < count; i++) {
+    rows.push([
+      {
+        text: "\u00A0",
+        colSpan: 3,
+        fontSize: 8,
+        border: [true, true, true, false],
+        color: "white"
+      },
+      { text: "\u00A0", fontSize: 8 },
+      { text: "\u00A0", fontSize: 8 },
     ]);
   }
   return rows;
@@ -827,7 +910,7 @@ function renderTradingSide(groups, { showHeader, showSummary, summaryLabel, summ
         },
         {
           text: item.amount != null
-            ? Number(item.amount).toLocaleString('en-IN', { minimumFractionDigits: 2,maximumFractionDigits: 2 })
+            ? Number(item.amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
             : "\u00A0", fontSize: 8,
           alignment: "right"
         }
@@ -898,6 +981,68 @@ function renderTradingSide(groups, { showHeader, showSummary, summaryLabel, summ
   }];
 }
 
+function renderBalanceSide(groups, { headerLabel, totalValue }, maxRowCount) {
+  const body = [];
+
+  // Header row
+  body.push([
+    { text: headerLabel, style: "tableHeader" },
+    { text: "Inner Amount (₹)", style: "tableHeader", alignment: "right" },
+    { text: "Outer Amount (₹)", style: "tableHeader", alignment: "right" }
+  ]);
+
+  groups.forEach(group => {
+    body.push([
+      { text: group.label, fontSize: 8, noWrap: true },
+      {
+        text: group.innerAmount ? Number(group.innerAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : "",
+        alignment: "right",
+        fontSize: 8
+      },
+      {
+        text: group.outerAmount ? Number(group.outerAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : "",
+        alignment: "right",
+        fontSize: 8
+      }
+    ]);
+  });
+
+  // Pad rows to equalize both sides
+  const paddingNeeded = maxRowCount - groups.length;
+  if (paddingNeeded > 0) {
+    body.push(...getBlankRowsForBalanceSheet(paddingNeeded));
+  }
+
+
+  // Totals row
+  body.push([
+    { text: "Total", colSpan: 2, style: "totalRow" },
+    {},
+    {
+      text: totalValue.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+      alignment: "right",
+      style: "totalRow"
+    }
+  ]);
+
+  return [{
+    table: {
+      headerRows: 1,
+      widths: [215, 80, 80],
+      body
+    },
+    layout: {
+      hLineWidth: () => 0.5,
+      vLineWidth: () => 0.5,
+      paddingLeft: () => 1,
+      paddingRight: () => 1,
+      paddingTop: () => 2,
+      paddingBottom: () => 2
+    },
+    margin: [0, 0, 0, 10]
+  }];
+}
+
 // Generate PDF and write to /tmp
 async function generatePDFToFile(data, fileType, fileName) {
   let docDefinition;
@@ -914,6 +1059,8 @@ async function generatePDFToFile(data, fileType, fileName) {
     docDefinition = buildTradingAccountOrPAndLDocDefinition(data);
   } else if (fileType === "tradingAccountProfitAndLoss") {
     docDefinition = buildCombinedTradingAndPAndLDocDefinition(data);
+  } else if (fileType === "horizontalBalanceSheet") {
+    docDefinition = buildBalanceSheetDocDefinition(data);
   } else {
     throw new Error(`Unsupported file type: ${fileType}`);
   }
