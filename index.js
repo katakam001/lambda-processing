@@ -8,6 +8,7 @@ const { processCSV } = require("./services/invoiceProcessor");
 const { sendMessagesInBatch } = require("./services/sqsService");
 const { getFileFromS3 } = require("./services/s3Service");
 const { exportDaybookToPDF } = require("./services/exportService");
+const { processCarryForwardBundle } = require("./services/carryForward/carryForwardProcessor");
 const processStage1a = require("./services/copyJob/stage1aProcessor");
 const processStage1b = require("./services/copyJob/stage1bProcessor");
 const processStage1c = require("./services/copyJob/stage1cProcessor");
@@ -158,6 +159,32 @@ exports.handler = async (event, context) => {
                         timestamp: new Date().toISOString()
                     }];
                     metadata.status = 3;
+                    metadata.errorMessage = error.message;
+                    await sendMessagesInBatch(failureSummary, metadata, "summary");
+                }
+
+            } else if (metadata.filetype === "carryForwardAccounts" && metadata.batchid) {
+
+                // ✅ Carry-forward JSON flow
+                console.log("📂 CarryForwardAccounts JSON detected → processing...");
+
+                try {
+                    const records = await processCarryForwardBundle(fileData, metadata, fileName);
+
+                    metadata.status = 5;
+                    await sendMessagesInBatch(records, metadata, fileType);
+
+                } catch (error) {
+                    console.error("❌ CarryForwardAccounts JSON parsing failed:", error.message);
+
+                    const failureSummary = [{
+                        batchId: metadata.batchid,
+                        totalMessages: 0,
+                        status: 6, // failed
+                        errorMessage: error.message,
+                        timestamp: new Date().toISOString()
+                    }];
+                    metadata.status = 6;
                     metadata.errorMessage = error.message;
                     await sendMessagesInBatch(failureSummary, metadata, "summary");
                 }

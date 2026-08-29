@@ -178,6 +178,44 @@ async function sendMessagesInBatch(records, metadata, fileType) {
         };
 
         entries.push(message);
+    } else if (fileType === "json" && metadata.filetype === "carryForwardAccounts" && metadata.batchid) {
+        // ✅ CarryForwardAccounts JSON flow
+        totalMessages = records.length;
+
+        for (let i = 0; i < records.length; i += batchSize) {
+            const batch = records.slice(i, i + batchSize).map((record, index) => ({
+                Id: `msg-${i + index}`,
+                MessageBody: JSON.stringify(record),
+                MessageAttributes: {
+                    userId: { DataType: "String", StringValue: metadata.userid },
+                    financialYear: { DataType: "String", StringValue: metadata.financialyear },
+                    batchId: { DataType: "String", StringValue: metadata.batchid },
+                    statementType: { DataType: "String", StringValue: metadata.filetype }
+                }
+            }));
+
+            entries.push(...batch);
+        }
+        const summaryMessage = {
+            Id: `summary-${Date.now()}`,
+            MessageBody: JSON.stringify({
+                batchId: metadata.batchid,
+                totalMessages,
+                status: metadata.status,
+                errorMessage: metadata.errorMessage,
+                timestamp: new Date().toISOString()
+            }),
+            MessageAttributes: {
+                messageType: { DataType: "String", StringValue: "summary" },
+                batchId: { DataType: "String", StringValue: metadata.batchid },
+                userId: { DataType: "String", StringValue: metadata.userid },
+                financialYear: { DataType: "String", StringValue: metadata.financialyear },
+                fileType: { DataType: "String", StringValue: metadata.filetype },
+            }
+        };
+
+        entries.push(summaryMessage);
+
     }
 
     // ✅ Append success summary message (if not JSON)
