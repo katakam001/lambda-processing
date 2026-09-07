@@ -252,7 +252,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                     Object.keys(tableDataByPage).forEach(page => {
                         cloneHeaderPositions(page, headerPositionsByPage, bankName);
                         applyAmountOffsets(page, headerPositionsByPage);
-                        applyDebitCreditOffsets(page, headerPositionsByPage);
+                        applyDebitCreditOffsets(page, headerPositionsByPage, bankName);
                     });
 
                 }
