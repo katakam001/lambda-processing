@@ -127,6 +127,7 @@ const bankConfig = {
         ],
         'ANDHRA PRAGATHI GRAMEENA BANK': [
             ["Post Date", "Value Date", "Details", "Chq no", "Debit", "Credit", "Balance"],
+            ["Date", "Particulars", "Withdrawals", "Deposits", "Balance"],
             ["Tran. Date", "Inst. No", "Tran. Particulars", "Debit in Rs.", "Credit in Rs.", "Balance in Rs."],
             ["Tran. Date", "Inst. No", "Tran. Particulars", "Debit in", "Credit in", "Balance in Rs."],
             ["Tran. Date", "Inst. No", "Tran. Particulars", "Debit in Rs.", "Credit in", "Balance in Rs."]
@@ -219,6 +220,7 @@ const bankConfig = {
             /^Statement\s+Downloaded\s+By\s+(.+)$/
         ],
         'ANDHRA PRAGATHI GRAMEENA BANK': [
+            /Page\s+\d+/i,
             'Ope Bal',
             'Total',
             'This is a system-generated statement, no signature is required.'

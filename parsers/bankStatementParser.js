@@ -240,7 +240,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                         }
 
 
-                        if (bankConfig.banksToIncludeMergeHeadersInOnePage.includes(bankName) && alignments["Inst. No"]) {
+                        if (bankConfig.banksToIncludeMergeHeadersInOnePage.includes(bankName) && (alignments["Inst. No"] || alignments["Deposits"])) {
                             tableDataByPage[page] = parseInt(page) === 1 ? tableDataByPage[page] : items;
                         }
                     });
@@ -251,7 +251,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                     //          correcting small positional shifts while retaining custom overrides.
                     Object.keys(tableDataByPage).forEach(page => {
                         cloneHeaderPositions(page, headerPositionsByPage, bankName);
-                        applyAmountOffsets(page, headerPositionsByPage);
+                        applyAmountOffsets(page, headerPositionsByPage, bankName);
                         applyDebitCreditOffsets(page, headerPositionsByPage, bankName);
                     });
 
@@ -390,7 +390,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                         );
                     }
 
-                    if (bankConfig.bankToIncludeValidateHeaderWithTransactionId.includes(bankName) && columnXMap["Particulars"]) {
+                    if ((bankConfig.bankToIncludeValidateHeaderWithTransactionId.includes(bankName) || bankConfig.banksToIncludeMergeHeadersInOnePage.includes(bankName)) && columnXMap["Particulars"]) {
 
                         snappedTableData = snappedTableData.map(item =>
                             refineValueDateWithHypenAndParticulars(item, columnXMap["Particulars"], columnXMap["Date"])
