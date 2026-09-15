@@ -3,6 +3,7 @@ const { filterAfterBroughtForward, findValidRowGroupByFilteredData } = require('
 const { cleanGroupedByYAxis } = require('../lineUtils');
 const { mergeAmountFragments, mergeBalanceFragments } = require('../balanceUtils');
 const { areAllEqualPositions, adjustHeaderPositionsByFilteredData } = require('../headerUtils');
+const { extractPreviousBalanceFromGroups,processAmountGroups } = require('../balanceUtils');
 
 /**
  *
@@ -46,6 +47,16 @@ function applyPartialHeaderBalanceMerge(tableDataByPage, headerPositionsByPage) 
 
         const groupByY = groupItemsByY(items, 0.01);
         const cleanGroupByYAxis = cleanGroupedByYAxis(groupByY);
+        const prevBalance = extractPreviousBalanceFromGroups(cleanGroupByYAxis);
+
+        processAmountGroups(
+            cleanGroupByYAxis,
+            prevBalance.value,
+            headerPositionsByPage[page],
+            "Debit", // debit column name
+            "Credit"     // credit column name
+        );
+
         const filteredData = filterAfterBroughtForward(cleanGroupByYAxis);
         const mergeSplitAmountData = mergeAmountFragments(filteredData, headerPositionsByPage[page]);
         const mergeSplitBalanceData = mergeBalanceFragments(mergeSplitAmountData, headerPositionsByPage[page]);

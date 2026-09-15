@@ -328,6 +328,13 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                         );
                     }
 
+                    if (bankConfig.banksToIncludeRefineCreditAndBalance.includes(bankName) && columnXMap["Details"]) {
+
+                        snappedTableData = snappedTableData.map(item =>
+                            refineValueDateAndParticulars(item, columnXMap["Details"], columnXMap["Post"])
+                        );
+                    }
+
                     if (bankConfig.banksToIncludeHeadernWithEpsilionVarationWithLatestFormat.includes(bankName) && columnXMap["Description"]) {
 
                         snappedTableData = snappedTableData.map(item =>
@@ -446,7 +453,12 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                                     refineValueDateAndParticulars(item, columnXMap["Transaction Details"], columnXMap["Value Date"])
                                 );
                             }
+                            if (bankConfig.banksToIncludeRefineCreditAndBalance.includes(bankName) && columnXMap["Details"]) {
 
+                                nextSnappedTableData = nextSnappedTableData.map(item =>
+                                    refineValueDateAndParticulars(item, columnXMap["Details"], columnXMap["Post"])
+                                );
+                            }
                             // console.log(nextSnappedTableData);
                             let nextMergedDates = combineDateFragments(nextSnappedTableData);
                             // console.log(nextMergedDates);
@@ -645,6 +657,9 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                 }
                 if (bankConfig.banksToIncludeHeadernWithEpsilionVaration.includes(bankName)) {
                     epsilon = 0.3;
+                }
+                if (bankConfig.banksToIncludeRefineCreditAndBalance.includes(bankName)) {
+                    epsilon = 0.375;
                 }
                 if (bankConfig.banksToIncludeHeadernWithEpsilionVarationWithLatestFormat.includes(bankName)) {
                     epsilon = 0.575;

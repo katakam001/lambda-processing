@@ -110,6 +110,7 @@ const bankConfig = {
         ],
         'BANK OF INDIA': [
             ["Sr No", "Date", "Remarks", "Debit", "Credit", "Balance"],
+            ["Date", "Description", "Instr. No.", "Debits", "Credits", "Balance"],
             ["DATE", "PARTICULARS", "CHQ-NO", "Debit", "Credit", "Available Bal."],
             ["Date", "Tran", "Ref Num", "Particulars", "Debit Amt.", "Credit Amt.", "Balance Amt."]
         ],

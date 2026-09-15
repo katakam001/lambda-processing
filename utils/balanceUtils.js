@@ -279,6 +279,32 @@ const inferAmountHeader = (prev, curr, headers) => {
     }
 };
 
+const inferGenericAmountHeader = (prev, curr, debitHeader, creditHeader) => {
+    const prevIsDR = prev < 0;
+    const currIsDR = curr < 0;
+    const delta = Math.abs(curr) - Math.abs(prev);
+
+    if (prevIsDR && currIsDR) {
+        // DR → DR
+        return delta > 0 ? debitHeader : creditHeader;
+    }
+
+    if (!prevIsDR && !currIsDR) {
+        // CR → CR
+        return delta > 0 ? creditHeader : debitHeader;
+    }
+
+    if (!prevIsDR && currIsDR) {
+        // CR → DR (flip into debit)
+        return debitHeader;
+    }
+
+    if (prevIsDR && !currIsDR) {
+        // DR → CR (flip into credit)
+        return creditHeader;
+    }
+};
+
 const inferAmountHeaderForStructuredRows = (prev, curr, headers) => {
     const prevIsDR = prev < 0;
     const currIsDR = curr < 0;
@@ -535,4 +561,43 @@ const splitCompoundAmount = (raw) => {
     return [firstPart, secondPart];
 };
 
-module.exports = { mergeAmountFragments, extractPreviousBalanceFromGroups, extractPreviousBalanceFromLines, normalizeBalance, extractPreviousBalanceWithoutBroughtForward, updateGroupsWithAmountItems, combineAmountFragments, combineWrappedAmounts, enhanceCombineWrappedAmounts, mergeBalanceFragments, extractBalanceFromText, inferAmountHeader, inferAmountHeaderForStructuredRows, extractPreviousBalanceFromGroupByYAxis, extractOpeningBalanceFromGroups };
+const processAmountGroups = (
+  cleanGroupByYAxis,
+  prevBalance,
+  headerXMap,
+  debitHeader,
+  creditHeader
+) => {
+  Object.values(cleanGroupByYAxis).forEach(group => {
+    const tokens = group.map(g => g.text.trim());
+    if (tokens.length < 2) return;
+
+    const amountItem = group[group.length - 2];   // actual object
+    const balanceItem = group[group.length - 1];  // actual object
+    const currBalance = normalizeBalance(balanceItem.text);
+
+    if (currBalance === null) return;
+
+    if (prevBalance === undefined || prevBalance === 0) {
+      // initialize prevBalance, skip inference for this row
+      prevBalance = currBalance;
+      return;
+    }
+
+    // normal inference
+    const amountHeader = inferGenericAmountHeader(
+      prevBalance,
+      currBalance,
+      debitHeader,
+      creditHeader
+    );
+
+    // instead of push, update the x-axis of the existing amount item
+    amountItem.x = headerXMap[amountHeader];
+
+    // update prevBalance for next iteration
+    prevBalance = currBalance;
+  });
+};
+
+module.exports = { mergeAmountFragments, extractPreviousBalanceFromGroups, extractPreviousBalanceFromLines, normalizeBalance, extractPreviousBalanceWithoutBroughtForward, updateGroupsWithAmountItems, combineAmountFragments, combineWrappedAmounts, enhanceCombineWrappedAmounts, mergeBalanceFragments, extractBalanceFromText, inferAmountHeader, inferAmountHeaderForStructuredRows, extractPreviousBalanceFromGroupByYAxis, extractOpeningBalanceFromGroups, processAmountGroups };
