@@ -407,7 +407,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                     }
 
                     if (bankConfig.banksToIncludeRefineDateAndDetails.includes(bankName) && columnXMap["Details"]) {
-                        const dateColumn = columnXMap["Date"] || columnXMap["Value Date"];
+                        const dateColumn = columnXMap["Date"] || columnXMap["Value Date"] || columnXMap["Value"];
                         if (dateColumn) {
                             snappedTableData = snappedTableData.map(item =>
                                 refineValueDateAndParticulars(item, columnXMap["Details"], dateColumn)
@@ -586,7 +586,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                     // Convert to JSON
                     // console.log(`Page ${page} Table Data:`, tableJSON);
                     combinedTableData[page] = normalizeBankPDF(tableJSON, accountId, userId, financialYear);
-                    // console.log(combinedTableData[page]);
+                    console.log(combinedTableData[page]);
                 });
                 resolve(combinedTableData);
             } else if (item.page) {
