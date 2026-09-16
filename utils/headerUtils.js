@@ -239,6 +239,29 @@ const detectAlignmentFromText = (text) => {
     return 'left'; // safe fallback
 };
 
+const deriveDebitCreditHeaders = (headers) => {
+  // normalize for matching
+  const lowerHeaders = headers.map(h => h.toLowerCase());
+
+  // possible debit/credit variants
+  const debitVariants = ["debit amt.", "debits"];
+  const creditVariants = ["credit amt.", "credits"];
+
+  const debitHeader = headers.find((h, idx) =>
+    debitVariants.includes(lowerHeaders[idx])
+  );
+  const creditHeader = headers.find((h, idx) =>
+    creditVariants.includes(lowerHeaders[idx])
+  );
+
+  if (!debitHeader || !creditHeader) {
+    throw new Error("Could not derive debit/credit headers from headers array");
+  }
+
+  return { debitHeader, creditHeader };
+};
+
+
 function areAllEqualPositions(headerPositions) {
     const { Debit, Credit, Balance } = headerPositions;
     return Debit === Credit && Credit === Balance;
@@ -286,4 +309,4 @@ function adjustHeaderPositionsByGroupByY(validRowGroup, headerPositions) {
 }
 
 
-module.exports = { estimateHeaderPositions, detectHeaderLine, estimateHeaderXMap, normalizeHeaderText, findAnchorHeaders, reestimateHeaderMap, inferHeaderXMap, detectAlignmentFromText, detectPerRowHeader, extractHeaderRowY, extractHeaderRow, extractHeaderPositions, sanitizeHeaderText, reorderHeaderPositions, areAllEqualPositions, adjustHeaderPositionsByFilteredData, adjustHeaderPositionsByGroupByY };
+module.exports = { estimateHeaderPositions, detectHeaderLine, estimateHeaderXMap, normalizeHeaderText, findAnchorHeaders, reestimateHeaderMap, inferHeaderXMap, detectAlignmentFromText, detectPerRowHeader, extractHeaderRowY, extractHeaderRow, extractHeaderPositions, sanitizeHeaderText, reorderHeaderPositions, areAllEqualPositions, adjustHeaderPositionsByFilteredData, adjustHeaderPositionsByGroupByY,deriveDebitCreditHeaders };

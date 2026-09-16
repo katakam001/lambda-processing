@@ -1,3 +1,5 @@
+const { isHorizontalLine } = require('./lineUtils.js');
+
 const mergeAmountFragments = (groupedByYAxis, headers) => {
     const merged = {};
 
@@ -234,6 +236,51 @@ const extractPreviousBalanceWithoutBroughtForward = (groupByY) => {
         const value = parseFloat(rawText.replace(/(Cr|Dr)/, '').replace(/,/g, ''));
         const type = rawText.endsWith('Cr') ? 'Cr' : rawText.endsWith('Dr') ? 'Dr' : null;
         return { value, type, y: parseFloat(firstY), raw: balanceToken };
+    }
+
+    return null;
+};
+
+const hasDate = (text) => {
+    // Detect dd-mm-yyyy, dd/mm/yyyy, dd-MMM-yyyy
+    const datePattern = /\b\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b|\b\d{1,2}[-/][A-Za-z]{3,}[-/]\d{2,4}\b/;
+    return datePattern.test(text);
+};
+
+const extractPreviousBalanceAfterHeader = (mergedLines, headerY) => {
+    // sort rows top to bottom
+    const sortedYKeys = Object.keys(mergedLines).sort((a, b) => parseFloat(a) - parseFloat(b));
+
+    // find index of headerY
+    const startIndex = sortedYKeys.findIndex(y => parseFloat(y) === parseFloat(headerY));
+    if (startIndex === -1) return null;
+
+    // scan rows after header
+    for (let i = startIndex + 1; i < sortedYKeys.length; i++) {
+        const y = sortedYKeys[i];
+        const line = mergedLines[y].trim();
+        if (!line) continue;
+
+        // skip horizontal lines
+        if (isHorizontalLine(line)) continue;
+
+        // skip rows containing dates
+        if (hasDate(line)) continue;
+
+        // balance regex
+        const balanceRegex = /\d{1,3}(?:,\d{2,3})*(?:\.\d{2})?(Cr|Dr)?$/i;
+        const match = line.trim().match(balanceRegex);
+        if (!match) continue;
+
+        const raw = match[0];
+        const value = parseFloat(raw.replace(/,/g, "").replace(/(Cr|Dr)/i, ""));
+        const type = raw.toUpperCase().endsWith("CR")
+            ? "Cr"
+            : raw.toUpperCase().endsWith("DR")
+                ? "Dr"
+                : null;
+
+        return { value, type, y: parseFloat(y), raw };
     }
 
     return null;
@@ -562,42 +609,69 @@ const splitCompoundAmount = (raw) => {
 };
 
 const processAmountGroups = (
-  cleanGroupByYAxis,
-  prevBalance,
-  headerXMap,
-  debitHeader,
-  creditHeader
+    cleanGroupByYAxis,
+    prevBalance,
+    headerXMap,
+    debitHeader,
+    creditHeader
 ) => {
-  Object.values(cleanGroupByYAxis).forEach(group => {
-    const tokens = group.map(g => g.text.trim());
-    if (tokens.length < 2) return;
+    Object.values(cleanGroupByYAxis).forEach(group => {
+        const tokens = group.map(g => g.text.trim());
+        if (tokens.length < 2) return;
 
-    const amountItem = group[group.length - 2];   // actual object
-    const balanceItem = group[group.length - 1];  // actual object
-    const currBalance = normalizeBalance(balanceItem.text);
+        const amountItem = group[group.length - 2];   // actual object
+        const balanceItem = group[group.length - 1];  // actual object
+        const currBalance = normalizeBalance(balanceItem.text);
 
-    if (currBalance === null) return;
+        if (currBalance === null) return;
 
-    if (prevBalance === undefined || prevBalance === 0) {
-      // initialize prevBalance, skip inference for this row
-      prevBalance = currBalance;
-      return;
-    }
+        if (prevBalance === undefined || prevBalance === 0) {
+            // initialize prevBalance, skip inference for this row
+            prevBalance = currBalance;
+            return;
+        }
 
-    // normal inference
-    const amountHeader = inferGenericAmountHeader(
-      prevBalance,
-      currBalance,
-      debitHeader,
-      creditHeader
-    );
+        // normal inference
+        const amountHeader = inferGenericAmountHeader(
+            prevBalance,
+            currBalance,
+            debitHeader,
+            creditHeader
+        );
 
-    // instead of push, update the x-axis of the existing amount item
-    amountItem.x = headerXMap[amountHeader];
+        // instead of push, update the x-axis of the existing amount item
+        amountItem.x = headerXMap[amountHeader];
 
-    // update prevBalance for next iteration
-    prevBalance = currBalance;
-  });
+        // update prevBalance for next iteration
+        prevBalance = currBalance;
+    });
 };
 
-module.exports = { mergeAmountFragments, extractPreviousBalanceFromGroups, extractPreviousBalanceFromLines, normalizeBalance, extractPreviousBalanceWithoutBroughtForward, updateGroupsWithAmountItems, combineAmountFragments, combineWrappedAmounts, enhanceCombineWrappedAmounts, mergeBalanceFragments, extractBalanceFromText, inferAmountHeader, inferAmountHeaderForStructuredRows, extractPreviousBalanceFromGroupByYAxis, extractOpeningBalanceFromGroups, processAmountGroups };
+const detectCarryForwardBalance = (groupByY) => {
+  for (const [y, items] of Object.entries(groupByY)) {
+    const mergedLine = items.map(i => i.text.trim()).join(" ").trim();
+    if (!mergedLine.includes("Total C/F:")) continue;
+
+    // Regex to capture all balance-like tokens
+    const balanceRegex = /\d{1,3}(?:,\d{2,3})*(?:\.\d{2})(Cr|Dr)?/gi;
+    const matches = [...mergedLine.matchAll(balanceRegex)];
+    if (matches.length === 0) continue;
+
+    // Take the LAST match as the actual balance
+    const raw = matches[matches.length - 1][0];
+    const value = parseFloat(raw.replace(/,/g, "").replace(/(Cr|Dr)/i, ""));
+    const type = raw.toUpperCase().endsWith("CR")
+      ? "Cr"
+      : raw.toUpperCase().endsWith("DR")
+      ? "Dr"
+      : null;
+
+    const signedValue = type === "Dr" ? -value : value;
+
+    return { value: signedValue, type, y: parseFloat(y), raw };
+  }
+  return null;
+};
+
+
+module.exports = { mergeAmountFragments, extractPreviousBalanceFromGroups, extractPreviousBalanceFromLines, normalizeBalance, extractPreviousBalanceWithoutBroughtForward, updateGroupsWithAmountItems, combineAmountFragments, combineWrappedAmounts, enhanceCombineWrappedAmounts, mergeBalanceFragments, extractBalanceFromText, inferAmountHeader, inferAmountHeaderForStructuredRows, extractPreviousBalanceFromGroupByYAxis, extractOpeningBalanceFromGroups, processAmountGroups, extractPreviousBalanceAfterHeader,inferGenericAmountHeader,detectCarryForwardBalance };

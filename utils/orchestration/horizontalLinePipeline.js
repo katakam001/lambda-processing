@@ -1,6 +1,8 @@
 const { inferHeaderMap } = require('./horizontalHeaderDetect');
 const { extractInitialBalance, updatePrevBalance } = require('./horizontalBalanceCarry');
 const { parsePageRows } = require('./horizontalRowParser');
+const { extractPreviousBalanceAfterHeader, detectCarryForwardBalance } = require('../balanceUtils');
+const { groupItemsByY } = require('../lineUtils');
 
 /**
  *
@@ -32,8 +34,12 @@ function applyHorizontalLineMerge(tableDataByPage, rawItemsByPage, headerPositio
 
     // Infer header map and initial balance from first page
     const [firstPageKey, firstPageItems] = pages[0];
-    const { headerXMap, cleanText, mergedLines } = inferHeaderMap(firstPageItems, headerVariants);
+    const { headerXMap, cleanText, mergedLines, headerYAxis } = inferHeaderMap(firstPageItems, headerVariants);
     let prevBalance = extractInitialBalance(mergedLines);
+    if (prevBalance == null) {
+        const prev = extractPreviousBalanceAfterHeader(mergedLines, headerYAxis);
+        prevBalance = prev.value;
+    }
 
     // Apply header map across all pages
     pages.forEach(([page, items]) => {

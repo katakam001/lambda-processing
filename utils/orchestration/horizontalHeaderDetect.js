@@ -6,10 +6,11 @@ function inferHeaderMap(firstPageItems, headerVariants) {
     const mergedLines = mergeGroupedText(groupByY);
 
     const header = detectHeaderLine(mergedLines, headerVariants);
+    const headerYAxis=header.y;
     const cleanText = sanitizeHeaderText(header.text, header.headerSet);
     const headerXMap = estimateHeaderXMap(cleanText, 0, 1);
 
-    return { headerXMap, cleanText, mergedLines };
+    return { headerXMap, cleanText, mergedLines,headerYAxis };
 }
 
 module.exports = { inferHeaderMap };

@@ -1,4 +1,5 @@
-const { extractBalanceFromText, normalizeBalance, inferAmountHeader, inferAmountHeaderForStructuredRows } = require('../balanceUtils.js');
+const { extractBalanceFromText, normalizeBalance, inferGenericAmountHeader, inferAmountHeaderForStructuredRows } = require('../balanceUtils.js');
+const { deriveDebitCreditHeaders } = require('../headerUtils.js');
 
 const parseTransactionRows = (mergedLines, headerXMap, headers, prevBalance) => {
     const allRows = [];
@@ -47,7 +48,14 @@ const parseTransactionRows = (mergedLines, headerXMap, headers, prevBalance) => 
         if (prevBalance !== undefined && balanceToken) {
             const curr = normalizeBalance(balanceToken);
             const prev = prevBalance; // already signed
-            const amountHeader = inferAmountHeader(prev, curr, headers);
+            const { debitHeader, creditHeader } = deriveDebitCreditHeaders(headers);
+
+            const amountHeader = inferGenericAmountHeader(
+                prev,
+                curr,
+                debitHeader,
+                creditHeader
+            );
 
             fields.push({ text: amountToken, x: headerXMap[amountHeader], y: yAxis });
         }
@@ -71,6 +79,90 @@ const parseTransactionRows = (mergedLines, headerXMap, headers, prevBalance) => 
 
 
         const narrationX = headerXMap["Particulars"];
+        const hasNarration = fields.some(f => f.x === narrationX && f.text.trim() !== "");
+
+        if (!(hasDate && numericCount >= 2 && hasNarration)) {
+            continue; // skip invalid row
+        }
+
+        prevBalance = normalizeBalance(balanceToken);
+
+
+        allRows.push(fields);
+    }
+
+    return allRows;
+};
+
+const parseWithHorizontalTransactionRows = (mergedLines, headerXMap, headers, prevBalance) => {
+    const allRows = [];
+
+    for (const [yAxis, line] of Object.entries(mergedLines)) {
+        // Use your improved tokenizer
+        const tokens = tokenizeTransactionLine(line);
+        // console.log(tokens);
+        if (tokens.length < 4) continue;
+
+        // Validate Date
+        const date = tokens[0];
+        if (!/^\d{2}-\d{2}-\d{4}$/.test(date)) continue;
+
+        const fields = [];
+
+        // Date
+        fields.push({ text: date, x: headerXMap[headers[0]], y: yAxis });
+
+        // Description (combine narration + instr. no if present)
+        const descriptionTokens = tokens.slice(1, tokens.length - 2);
+        if (descriptionTokens.length) {
+            fields.push({
+                text: descriptionTokens.join(" "),
+                x: headerXMap[headers[1]],
+                y: yAxis
+            });
+        }
+
+        // Amount + Balance
+        const amountToken = tokens[tokens.length - 2];
+        const balanceToken = tokens[tokens.length - 1];
+
+        const balanceValue = balanceToken.replace(/[^\d.,]/g, "");
+        const balanceHeader = headers[headers.length - 1];
+
+        if (prevBalance !== undefined && balanceToken) {
+            const curr = normalizeBalance(balanceToken);
+            const prev = prevBalance; // already signed
+            const { debitHeader, creditHeader } = deriveDebitCreditHeaders(headers);
+
+            const amountHeader = inferGenericAmountHeader(
+                prev,
+                curr,
+                debitHeader,
+                creditHeader
+            );
+
+            fields.push({ text: amountToken, x: headerXMap[amountHeader], y: yAxis });
+        }
+
+        fields.push({ text: balanceToken, x: headerXMap[balanceHeader], y: yAxis });
+
+        // console.log(fields);
+        // Validation: must have Date, 2 amounts, and Narration
+        const hasDate = !!date;
+        const balanceX = headerXMap[headers[headers.length - 1]];
+
+        const numericCount = fields.filter(f => {
+            if (f.x === balanceX) {
+                // For balance column, strip DR/CR before numeric check
+                const cleaned = f.text.replace(/[^\d.,]/g, "");
+                return /^[\d,.]+$/.test(cleaned);
+            }
+            // For all other fields, check as-is
+            return /^[\d,.]+$/.test(f.text);
+        }).length;
+
+
+        const narrationX = headerXMap["Description"];
         const hasNarration = fields.some(f => f.x === narrationX && f.text.trim() !== "");
 
         if (!(hasDate && numericCount >= 2 && hasNarration)) {
@@ -486,9 +578,8 @@ const parseTransactionRow = (item, previousBalance, headerPositions) => {
 };
 
 const tokenizeTransactionLine = (line) => {
-    const date = line.substring(0, 10);
-    const rest = line.substring(10).trim();
-
+    const date = line.trim().substring(0, 10);
+    const rest = line.trim().substring(10).trim();
     const coarseTokens = rest.split(/\s{2,}/).map(s => s.trim()).filter(Boolean);
 
     if (coarseTokens.length > 0) {
@@ -514,4 +605,4 @@ const tokenizeTransactionLine = (line) => {
 };
 
 
-module.exports = { parseTransactionRows, parseStructuredRows, parseGroupRows, parseMultipleHeaderGroupRows, parseTransactionRow, parseTransactionRowsWithFuzzyLogic };
+module.exports = { parseTransactionRows, parseStructuredRows, parseGroupRows, parseMultipleHeaderGroupRows, parseTransactionRow, parseTransactionRowsWithFuzzyLogic, parseWithHorizontalTransactionRows };
