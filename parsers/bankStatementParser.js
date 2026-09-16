@@ -252,7 +252,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                     const firstHeaderPositions = headerPositionsByPage[1]; // Assume Page 1 always has headers
 
                     Object.keys(tableDataByPage).forEach(page => {
-                        cloneHeaderPositions(page, headerPositionsByPage, firstHeaderPositions);
+                        cloneHeaderPositions(page, headerPositionsByPage,bankName, firstHeaderPositions);
                         applyAmountOffsets(page, headerPositionsByPage, bankName);
                         applyDebitCreditOffsets(page, headerPositionsByPage, bankName);
                     });
