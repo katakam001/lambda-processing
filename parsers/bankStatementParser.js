@@ -249,8 +249,10 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                     // Iterate through all parsed pages and normalize header positions.
                     // Purpose: ensures consistent header alignment across multi‑page statements,
                     //          correcting small positional shifts while retaining custom overrides.
+                    const firstHeaderPositions = headerPositionsByPage[1]; // Assume Page 1 always has headers
+
                     Object.keys(tableDataByPage).forEach(page => {
-                        cloneHeaderPositions(page, headerPositionsByPage, bankName);
+                        cloneHeaderPositions(page, headerPositionsByPage, firstHeaderPositions);
                         applyAmountOffsets(page, headerPositionsByPage, bankName);
                         applyDebitCreditOffsets(page, headerPositionsByPage, bankName);
                     });

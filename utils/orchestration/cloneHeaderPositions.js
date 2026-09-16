@@ -6,14 +6,8 @@ const bankConfig = require('../../config/bankConfig');
  *  - Skip Page 1 unless bankConfig requires re-alignment.
  *  - Restore Narration override if present.
  */
-function cloneHeaderPositions(page, headerPositionsByPage, bankName) {
-    const firstHeaderPositions = headerPositionsByPage[1]; // Assume Page 1 always has headers
-    console.log(firstHeaderPositions);
-
-    if (
-        !bankConfig.banksToIncludeChangeHeadersXAxisForAmounts.includes(bankName) &&
-        parseInt(page) === 1
-    ) {
+function cloneHeaderPositions(page, headerPositionsByPage, firstHeaderPositions) {
+    if (!bankConfig.banksToIncludeChangeHeadersXAxisForAmounts.includes(bankName) && parseInt(page) === 1) {
         return;
     }
 
