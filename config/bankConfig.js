@@ -78,6 +78,8 @@ const bankConfig = {
                 'Debit', 'Credit', 'Balance'],
             ['Date', 'Details', 'Ref No./Cheque',
                 'Debit', 'Credit', 'Balance'],
+            ['Date (Value Date)', 'Narration', 'Ref/Cheque No.', 'Branch Code',
+                'Debit', 'Credit', 'Balance'],
             ['Value Date', 'Post Date', 'Details', 'Ref No./Cheque',
                 'Debit', 'Credit', 'Balance'],
             ['Txn Date', 'Value Date', 'Description',
@@ -246,13 +248,13 @@ const bankConfig = {
     },
     headerYForBank: {
         'SBI': [
-            'Txn Date', 'Post Date', 'Date', 'Txn'
+            'Txn Date', 'Post Date', 'Date', 'Txn', 'Date (Value Date)'
         ],
         'ICICI BANK': [
             'Sl', 'Sr', 'S.no', 'Date', "DATE"
         ]
     },
-    sbifirstHeaders: ['Txn Date', 'Post Date', 'Txn', 'Balance'],//Except Date format
+    sbifirstHeaders: ['Txn Date', 'Post Date', 'Txn', 'Date (Value Date)', 'Balance'],//Except Date format
 
     headerBootstrapByBank: {
         'SBI': {

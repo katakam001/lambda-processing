@@ -174,6 +174,45 @@ const mergeNarrationLines = (
     );
 };
 
+const splitTransactions = (items, columnXMap) => {
+    const transactions = [];
+    let current = [];
+
+    for (const item of items) {
+        if (item.x === columnXMap["Date (Value Date)"]) {
+            if (current.length > 0) transactions.push(current);
+            current = [item];
+        } else {
+            current.push(item);
+        }
+    }
+
+    if (current.length > 0) transactions.push(current);
+    return transactions;
+};
+
+
+const sortItemsByDateSequence = (items, columnXMap, epsilon = 0.51) => {
+    // sort by y, then x
+    const sorted = [...items];
+
+    const sequenced = [];
+    let lastDateY = null;
+
+    for (const item of sorted) {
+        if (item.x === columnXMap["Date (Value Date)"]) {
+            // if this date is within epsilon of the last date, skip duplicate
+            if (lastDateY !== null && Math.abs(item.y - lastDateY) <= epsilon) {
+                continue;
+            }
+            lastDateY = item.y;
+        }
+        sequenced.push(item);
+    }
+
+    return sequenced;
+};
+
 const cleanGroupedByYAxis = (groupedByYAxis) => {
     const cleaned = {};
 
@@ -286,4 +325,4 @@ const isHorizontalLine = (text) => {
     return pattern.test(text);
 };
 
-module.exports = { groupItemsByY, groupItemsByYLegacy, filterGroupedByY, mergeGroupedText, combineMultiLineRows, combineYAxisSameMultiLineRows, mergeNarrationLines, cleanGroupedByYAxis, combineDateFragments, isHorizontalLine, groupRowsByY, formatCombinedRows };
+module.exports = { groupItemsByY, groupItemsByYLegacy, filterGroupedByY, mergeGroupedText, combineMultiLineRows, combineYAxisSameMultiLineRows, mergeNarrationLines, cleanGroupedByYAxis, combineDateFragments, isHorizontalLine, groupRowsByY, formatCombinedRows, splitTransactions, sortItemsByDateSequence };

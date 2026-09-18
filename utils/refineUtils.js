@@ -110,6 +110,23 @@ const refineValueDateAndParticulars = (
     return item;
 };
 
+const refineValueDateAndNarration = (
+    item,
+    ParticularsX,
+    dateX
+) => {
+    // ✅ Accept both DD-MMM-YY and DD-MMM-YYYY (with optional parentheses)
+    const isValidDate = text =>
+        /^(\d{2}-[A-Za-z]{3}-\d{2}|\d{2}-[A-Za-z]{3}-\d{4}|\(\d{2}-[A-Za-z]{3}-\d{4}\))$/.test(text.trim());
+
+    if (item.x === dateX && !isValidDate(item.text)) {
+        // Mis-snapped narration or non-date at Date position
+        return { ...item, x: ParticularsX };
+    }
+
+    return item;
+};
+
 const refineValueDateWithHypenAndParticulars = (
     item,
     ParticularsX,
@@ -128,4 +145,4 @@ const refineValueDateWithHypenAndParticulars = (
 };
 
 
-module.exports = { refineRefNoAndNarration, refineChequeAndNarration, refineBranchAndNarration, refineTransactionIdAndRemarks, refineDateAndParticulars, refineValueDateAndParticulars, refineValueDateWithHypenAndParticulars };
+module.exports = { refineRefNoAndNarration, refineChequeAndNarration, refineBranchAndNarration, refineTransactionIdAndRemarks, refineDateAndParticulars, refineValueDateAndParticulars, refineValueDateWithHypenAndParticulars, refineValueDateAndNarration };

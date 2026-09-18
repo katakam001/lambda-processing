@@ -1,7 +1,7 @@
 const { groupItemsByY } = require('../lineUtils');
 const { cloneHeadersFromPage1 } = require('./onePageHeaderClone');
 const { updatePreviousBalance } = require('./onePageBalanceCarry');
-const { filterRows } = require('./onePageRowFilter');
+const { filterRows, filterRowsWithoutPreviousBalance } = require('./onePageRowFilter');
 const { isValidRowGroup } = require('./onePageRowValidator');
 
 
@@ -56,4 +56,24 @@ function applyOnePageMerge(tableDataByPage, rawItemsByPage, headerPositionsByPag
     return { tableDataByPage, headerPositionsByPage };
 }
 
-module.exports = { applyOnePageMerge };
+function applyOnePageMergeWithoutPreviousBalance(tableDataByPage, rawItemsByPage, headerPositionsByPage) {
+    const firstHeaderPositions = headerPositionsByPage[1];
+    let previousBalance = null;
+
+    Object.keys(tableDataByPage).forEach(page => {
+        const groupByY = parseInt(page) === 1
+            ? groupItemsByY(tableDataByPage[page], 0.01)
+            : groupItemsByY(rawItemsByPage[page], 0.01);
+
+        // 🔹 Clone headers from page 1
+        cloneHeadersFromPage1(headerPositionsByPage, firstHeaderPositions, page);
+        // console.log(groupByY);
+
+        // 🔹 Flatten grouped items and assign back to tableDataByPage
+        tableDataByPage[page] = filterRowsWithoutPreviousBalance(groupByY);
+    });
+
+    return { tableDataByPage, headerPositionsByPage };
+}
+
+module.exports = { applyOnePageMerge, applyOnePageMergeWithoutPreviousBalance };

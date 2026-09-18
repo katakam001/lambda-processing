@@ -2,7 +2,7 @@ const { PdfReader } = require("pdfreader");
 const bankConfig = require('../config/bankConfig');
 const { applyTableEndFilter } = require('../utils/orchestration/tableEndFilter');
 const { applyMultiPageMerge } = require('../utils/orchestration/multiPageMergePipeline');
-const { applyOnePageMerge } = require('../utils/orchestration/onePageMergePipeline');
+const { applyOnePageMerge, applyOnePageMergeWithoutPreviousBalance } = require('../utils/orchestration/onePageMergePipeline');
 const { applyHorizontalLineMerge } = require('../utils/orchestration/horizontalLinePipeline');
 const { applyHorizontalPartialLineMerge } = require('../utils/orchestration/horizontalPartialLinePipeline');
 const { applyPartialWithoutHeadersMerge } = require('../utils/orchestration/partialWithoutHeadersPipeline');
@@ -18,10 +18,10 @@ const { cloneHeaderPositions } = require('../utils/orchestration/cloneHeaderPosi
 const { applyAmountOffsets } = require('../utils/orchestration/applyAmountOffsets');
 const { applyDebitCreditOffsets } = require('../utils/orchestration/applyDebitCreditOffsets');
 const { snapXCoordinate, snapToColumn, snapToColumnWithAlignment, refineAmountSnappedToBalance, refineAmountAndBranchCode, refineYAxisOfParticularsWithDate } = require('../utils/snapUtils.js');
-const { refineRefNoAndNarration, refineChequeAndNarration, refineBranchAndNarration, refineTransactionIdAndRemarks, refineDateAndParticulars, refineValueDateAndParticulars, refineValueDateWithHypenAndParticulars } = require('../utils/refineUtils.js');
+const { refineRefNoAndNarration, refineChequeAndNarration, refineBranchAndNarration, refineTransactionIdAndRemarks, refineDateAndParticulars, refineValueDateAndParticulars, refineValueDateWithHypenAndParticulars, refineValueDateAndNarration } = require('../utils/refineUtils.js');
 const { convertToJSONSimple, convertToJSONByY } = require('../utils/convertUtils.js');
 const { matchesEndMarker, matchesEndMarkerUsingFuzzyLogic } = require('../utils/markerUtils.js');
-const { combineMultiLineRows, combineYAxisSameMultiLineRows, mergeNarrationLines, combineDateFragments, isHorizontalLine } = require('../utils/lineUtils.js');
+const { combineMultiLineRows, combineYAxisSameMultiLineRows, mergeNarrationLines, combineDateFragments, splitTransactions, sortItemsByDateSequence, isHorizontalLine } = require('../utils/lineUtils.js');
 const { detectAlignmentFromText, reorderHeaderPositions } = require('../utils/headerUtils.js');
 const { getCarryForwardFragments, extractCarryForwardedParticulars } = require('../utils/orchestration/carryForward.js');
 const { normalizeBankPDF } = require('../utils/orchestration/normalize.js');
@@ -92,6 +92,11 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                 if (!isAFuzzyLogic && alignments["Post Date"] &&
                     bankConfig.banksToIncludeMergeHeadersInOnePage.includes(bankName)) {
                     applyOnePageMerge(tableDataByPage, rawItemsByPage, headerPositionsByPage);
+                }
+
+                if (alignments["Date (Value Date)"] &&
+                    bankConfig.banksToIncludeHeadernWithEpsilionVarationWithLatestFormat.includes(bankName)) {
+                    applyOnePageMergeWithoutPreviousBalance(tableDataByPage, rawItemsByPage, headerPositionsByPage);
                 }
 
                 //   Horizontal line merge pipeline
@@ -252,7 +257,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                     const firstHeaderPositions = headerPositionsByPage[1]; // Assume Page 1 always has headers
 
                     Object.keys(tableDataByPage).forEach(page => {
-                        cloneHeaderPositions(page, headerPositionsByPage,bankName, firstHeaderPositions);
+                        cloneHeaderPositions(page, headerPositionsByPage, bankName, firstHeaderPositions);
                         applyAmountOffsets(page, headerPositionsByPage, bankName);
                         applyDebitCreditOffsets(page, headerPositionsByPage, bankName);
                     });
@@ -341,6 +346,11 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
 
                         snappedTableData = snappedTableData.map(item =>
                             refineValueDateAndParticulars(item, columnXMap["Description"], columnXMap["Value Date"])
+                        );
+                    }
+                    if (bankConfig.banksToIncludeHeadernWithEpsilionVarationWithLatestFormat.includes(bankName) && columnXMap["Narration"]) {
+                        snappedTableData = snappedTableData.map(item =>
+                            refineValueDateAndNarration(item, columnXMap["Narration"], columnXMap["Date (Value Date)"])
                         );
                     }
 
@@ -552,8 +562,11 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                             combinedRows = combineYAxisSameMultiLineRows(combinedRows);
                         }
                         // console.log(combinedRows);
-                    }
-                    else if (bankConfig.banksToIncludeOrderChangeOfBalance.includes(bankName) && columnXMap["Particulars"]) {
+                    } else if (bankConfig.banksToIncludeHeadernWithEpsilionVarationWithLatestFormat.includes(bankName) && columnXMap["Narration"]) {
+                        const sequenced = sortItemsByDateSequence(mergedDates, columnXMap);
+                        combinedRows = splitTransactions(sequenced, columnXMap).flat();
+                        combinedRows = combineMultiLineRows(combinedRows);
+                    } else if (bankConfig.banksToIncludeOrderChangeOfBalance.includes(bankName) && columnXMap["Particulars"]) {
 
                         combinedRows = mergedDates.map(item =>
                             refineYAxisOfParticularsWithDate(item, columnXMap["Date"], columnXMap["Particulars"], mergedDates, 0.425)
@@ -878,7 +891,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                         });
                     }
                 }
-                if (bankConfig.bankshasHeadersInOnePage.includes(bankName) || bankConfig.banksToIncludeParitalMergeHeadersWithDifferentSpaces.includes(bankName)) {
+                if (bankConfig.bankshasHeadersInOnePage.includes(bankName) || bankConfig.banksToIncludeParitalMergeHeadersWithDifferentSpaces.includes(bankName) || bankConfig.banksToIncludeHeadernWithEpsilionVarationWithLatestFormat.includes(bankName)) {
 
                     rawItemsByPage[currentPage].push({
                         text: decodedText,

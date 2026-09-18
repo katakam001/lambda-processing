@@ -422,65 +422,71 @@ function buildTrialBalanceDocDefinition(data) {
       }
     }
   });
+  const isTrialBalance = (data.reportTitle || "Trial Balance") === "Trial Balance";
 
-  // 📋 High-Volume Summary Section
-  if (highVolumeSummaries.length > 0) {
-    highVolumeSummaries.forEach(summary => {
-      const hasDebit = summary.debitTotal !== 0 && summary.debitTotal != null;
-      const hasCredit = summary.creditTotal !== 0 && summary.creditTotal != null;
+  if (isTrialBalance) {
+    // 📋 High-Volume Summary Section
+    if (highVolumeSummaries.length > 0) {
+      highVolumeSummaries.forEach(summary => {
+        const hasDebit = summary.debitTotal !== 0 && summary.debitTotal != null;
+        const hasCredit = summary.creditTotal !== 0 && summary.creditTotal != null;
 
-      unifiedBody.push([
-        { text: summary.groupName },
-        {
-          text: hasDebit
-            ? summary.debitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-            : "",
-          alignment: "right",
-          bold: true
-        },
-        {
-          text: hasCredit
-            ? summary.creditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-            : "",
-          alignment: "right",
-          bold: true
-        }
-      ]);
+        unifiedBody.push([
+          { text: summary.groupName },
+          {
+            text: hasDebit
+              ? summary.debitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+              : "",
+            alignment: "right",
+            bold: true
+          },
+          {
+            text: hasCredit
+              ? summary.creditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+              : "",
+            alignment: "right",
+            bold: true
+          }
+        ]);
+      });
+    }
+
+    // ✅ Grand Total
+    unifiedBody.push([
+      { text: "Total", bold: true },
+      {
+        text: data.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        alignment: "right",
+        bold: true
+      },
+      {
+        text: data.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        alignment: "right",
+        bold: true
+      }
+    ]);
+  }
+  // 📋 Unified Table Output
+  const isNormalGroupDrilldown = !isTrialBalance && highVolumeSummaries.length === 0;
+
+  if (isTrialBalance || isNormalGroupDrilldown) {
+    content.push({
+      table: {
+        headerRows: 1,
+        widths: ['*', 100, 100],
+        body: unifiedBody
+      },
+      layout: {
+        hLineWidth: () => 0.5,
+        vLineWidth: () => 0.5,
+        paddingLeft: () => 2,
+        paddingRight: () => 2,
+        paddingTop: () => 1,
+        paddingBottom: () => 1
+      },
+      margin: [0, 0, 0, 10]
     });
   }
-
-  // ✅ Grand Total
-  unifiedBody.push([
-    { text: "Total", bold: true },
-    {
-      text: data.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-      alignment: "right",
-      bold: true
-    },
-    {
-      text: data.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-      alignment: "right",
-      bold: true
-    }
-  ]);
-
-  // 📋 Unified Table Output
-  content.push({
-    table: {
-      headerRows: 1,
-      widths: ['*', 100, 100],
-      body: unifiedBody
-    },
-    layout: {
-      hLineWidth: () => 0.5,
-      vLineWidth: () => 0.5,
-      paddingLeft: () => 2,
-      paddingRight: () => 2,
-      paddingTop: () => 1,
-      paddingBottom: () => 1
-    },
-    margin: [0, 0, 0, 10]
-  });
 
   // 📊 Full Tables for High-Volume Groups
   highVolumeSummaries.forEach(summary => {
