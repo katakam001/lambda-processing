@@ -754,6 +754,11 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                             detectedHeaders.clear();
                             headerPositionsByPage[currentPage] = {};
                         }
+                        if (bankConfig.banksToIncludeHeadernWithEpsilionVarationWithLatestFormat.includes(bankName) && !isFirstHeaderDetected && headerY && (bankConfig.headerBootstrapByBank[bankName][decodedText.trim()])) {
+                            headerY = null;
+                            detectedHeaders.clear();
+                            headerPositionsByPage[currentPage] = {};
+                        }
                         if (headerY === null) {
                             if (bankConfig.banksToIncludeHeadernWithEpsilionVarationWithLatestFormat.includes(bankName) && bankConfig.sbifirstHeaders.includes(decodedText.trim())) {
                                 isFirstHeaderDetected = true;
