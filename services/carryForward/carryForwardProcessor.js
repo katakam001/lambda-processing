@@ -21,7 +21,7 @@ async function processCarryForwardBundle(fileData, metadata, s3Key) {
     for (const [groupName, accounts] of Object.entries(accountsByGroup)) {
         for (const acc of accounts) {
             records.push({
-                groupName: groupName,
+                groupName: acc.child_group_name || groupName,
                 accountName: acc.accountName,
                 debit: acc.debit || 0,
                 credit: acc.credit || 0
