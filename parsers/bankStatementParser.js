@@ -5,6 +5,7 @@ const { applyMultiPageMerge } = require('../utils/orchestration/multiPageMergePi
 const { applyOnePageMerge, applyOnePageMergeWithoutPreviousBalance } = require('../utils/orchestration/onePageMergePipeline');
 const { applyHorizontalLineMerge } = require('../utils/orchestration/horizontalLinePipeline');
 const { applyHorizontalPartialLineMerge } = require('../utils/orchestration/horizontalPartialLinePipeline');
+const { applyGroupByYAxisAndassignAmountProperly } = require('../utils/orchestration/tableNormalizationUtil.js');
 const { applyPartialWithoutHeadersMerge } = require('../utils/orchestration/partialWithoutHeadersPipeline');
 const { applyPartialHeaderBalanceMerge } = require('../utils/orchestration/partialHeaderBalanceMerge');
 const { applyPartialHeaderMerge } = require('../utils/orchestration/partialHeaderMerge');
@@ -18,7 +19,7 @@ const { cloneHeaderPositions } = require('../utils/orchestration/cloneHeaderPosi
 const { applyAmountOffsets } = require('../utils/orchestration/applyAmountOffsets');
 const { applyDebitCreditOffsets } = require('../utils/orchestration/applyDebitCreditOffsets');
 const { snapXCoordinate, snapToColumn, snapToColumnWithAlignment, refineAmountSnappedToBalance, refineAmountAndBranchCode, refineYAxisOfParticularsWithDate } = require('../utils/snapUtils.js');
-const { refineRefNoAndNarration, refineChequeAndNarration, refineBranchAndNarration, refineTransactionIdAndRemarks, refineDateAndParticulars, refineValueDateAndParticulars, refineValueDateWithHypenAndParticulars, refineValueDateAndNarration } = require('../utils/refineUtils.js');
+const { refineRefNoAndNarration, refineChequeAndNarration, refineBranchAndNarration, refineTransactionIdAndRemarks, refineDateAndParticulars, refineValueDateAndParticulars, refineValueDateWithHypenAndParticulars, refineValueDateAndNarration, refineValueDateWithHypenAndInstNo } = require('../utils/refineUtils.js');
 const { convertToJSONSimple, convertToJSONByY } = require('../utils/convertUtils.js');
 const { matchesEndMarker, matchesEndMarkerUsingFuzzyLogic } = require('../utils/markerUtils.js');
 const { combineMultiLineRows, combineYAxisSameMultiLineRows, mergeNarrationLines, combineDateFragments, splitTransactions, sortItemsByDateSequence, isHorizontalLine } = require('../utils/lineUtils.js');
@@ -49,6 +50,8 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
         const headerVariants = bankConfig.bankHeaders[bankName] || [];
         const exclusivePairs = bankConfig.bankExclusivePairs[bankName] || [];
         const excludeConfigs = bankConfig.excludeHeader[bankName] || [];
+        const resetHeaders = bankConfig.banksHeaderYReseted?.[bankName] || [];
+
         // console.log(headerVariants);
 
         // console.log(requiredHeaders);
@@ -184,6 +187,13 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                     applyMergeHeadersOnePageMultipleTimes(tableDataByPage, rawItemsByPage, headerPositionsByPage);
                 }
 
+                if (
+                    alignments['SNO'] &&
+                    bankConfig.banksToIncludeOrderChangeOfRemarks.includes(bankName)
+                ) {
+                    applyGroupByYAxisAndassignAmountProperly(tableDataByPage, headerPositionsByPage);
+                }
+
 
                 if (!isAFuzzyLogic && bankConfig.bankshasHeadersInOnePage.includes(bankName)) {
 
@@ -291,6 +301,10 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                         alignments["TXN DATE"] = 'left';
                         width = 0.2
                     }
+                    if (bankConfig.banksToIncludeOrderChangeOfRemarks.includes(bankName) && alignments['SNO']) {
+                        alignments["DEBITS"] = 'left';
+                        alignments["CREDITS"] = 'left';
+                    }
 
                     if (bankConfig.banksToIncludeHeadersAlign.includes(bankName)) {
                         snappedTableData = tableDataByPage[page].map(item =>
@@ -302,6 +316,12 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                         );
                     }
                     // console.log(snappedTableData);
+                    if (bankConfig.banksToIncludeOrderChangeOfRemarks.includes(bankName) && columnXMap["INST NO"]) {
+
+                        snappedTableData = snappedTableData.map(item =>
+                            refineValueDateWithHypenAndInstNo(item, columnXMap["INST NO"], columnXMap["TRAN DATE"])
+                        );
+                    }
 
                     if (bankConfig.banksToIncludeHeadersAlignChangeXAxis.includes(bankName)) {
                         snappedTableData = snapXCoordinate(snappedTableData, columnXMap["Chq No"], columnXMap["Particulars"], 0.1);
@@ -599,7 +619,7 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                     // Convert to JSON
                     // console.log(`Page ${page} Table Data:`, tableJSON);
                     combinedTableData[page] = normalizeBankPDF(tableJSON, accountId, userId, financialYear);
-                    console.log(combinedTableData[page]);
+                    // console.log(combinedTableData[page]);
                 });
                 resolve(combinedTableData);
             } else if (item.page) {
@@ -755,6 +775,11 @@ const extractTableFromBufferForBankStatement = (fileStream, bankName, userId, fi
                             headerPositionsByPage[currentPage] = {};
                         }
                         if (bankConfig.banksToIncludeHeadernWithEpsilionVarationWithLatestFormat.includes(bankName) && !isFirstHeaderDetected && headerY && (bankConfig.headerBootstrapByBank[bankName][decodedText.trim()])) {
+                            headerY = null;
+                            detectedHeaders.clear();
+                            headerPositionsByPage[currentPage] = {};
+                        }
+                        if (headerY && resetHeaders.includes(decodedText.trim())) {
                             headerY = null;
                             detectedHeaders.clear();
                             headerPositionsByPage[currentPage] = {};

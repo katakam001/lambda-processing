@@ -144,5 +144,21 @@ const refineValueDateWithHypenAndParticulars = (
     return item;
 };
 
+const refineValueDateWithHypenAndInstNo = (
+    item,
+    instNoX,
+    dateX
+) => {
+    // ✅ Accept dates like 01-02-2026
+    const isValidDate = text =>
+        /^\d{2}-\d{2}-\d{4}$/.test(text.trim());
 
-module.exports = { refineRefNoAndNarration, refineChequeAndNarration, refineBranchAndNarration, refineTransactionIdAndRemarks, refineDateAndParticulars, refineValueDateAndParticulars, refineValueDateWithHypenAndParticulars, refineValueDateAndNarration };
+    if (item.x === dateX && !isValidDate(item.text)) {
+        return { ...item, x: instNoX };
+    }
+
+    return item;
+};
+
+
+module.exports = { refineRefNoAndNarration, refineChequeAndNarration, refineBranchAndNarration, refineTransactionIdAndRemarks, refineDateAndParticulars, refineValueDateAndParticulars, refineValueDateWithHypenAndParticulars, refineValueDateAndNarration,refineValueDateWithHypenAndInstNo };

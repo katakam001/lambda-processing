@@ -112,6 +112,7 @@ const bankConfig = {
         ],
         'BANK OF INDIA': [
             ["Sr No", "Date", "Remarks", "Debit", "Credit", "Balance"],
+            ["SNO", "TRAN DATE", "INST NO", "DESCRIPTION", "DEBITS", "CREDITS", "BALANCE"],
             ["Date", "Description", "Instr. No.", "Debits", "Credits", "Balance"],
             ["DATE", "PARTICULARS", "CHQ-NO", "Debit", "Credit", "Available Bal."],
             ["Date", "Tran", "Ref Num", "Particulars", "Debit Amt.", "Credit Amt.", "Balance Amt."]
@@ -206,7 +207,8 @@ const bankConfig = {
         ],
         'BANK OF INDIA': [
             'Transaction Date',
-            'NOTE:'
+            'NOTE:',
+            'Page:'
         ],
         'AXIS BANK': [
             'Legends :',
@@ -255,7 +257,11 @@ const bankConfig = {
         ]
     },
     sbifirstHeaders: ['Txn Date', 'Post Date', 'Txn', 'Date (Value Date)', 'Balance'],//Except Date format
-
+    banksHeaderYReseted: {
+        'BANK OF INDIA': [
+            'TRAN DATE'
+        ]
+    },
     headerBootstrapByBank: {
         'SBI': {
             'Balance': ['Value Date', 'Post Date', 'Details', 'Ref No./Cheque',
